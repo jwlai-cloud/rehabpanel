@@ -6,89 +6,113 @@
 <title>RehabPanel — Negotiated Schedule</title>
 <style>
   :root{
-    --bg:#0f1720; --panel:#16212e; --ink:#e7eef5; --muted:#8aa0b3;
-    --line:#243446; --teal:#179e86; --teal2:#2bd4b0;
-    --amber:#e0a83d; --red:#e2614c; --good:#1f7a5e; --chip:#1d2b3a;
+    --paper:#eef3f7; --panel:#ffffff; --ink:#0f2942; --muted:#5a7287;
+    --line:#dde6ee; --line2:#e9eff5; --col:#f5f8fb;
+    --teal:#0b6e63; --teal-d:#085a51; --teal-soft:#e6f3f0;
+    --red:#cc4b3e; --amber:#c28a14; --green:#2f8f6e; --slate:#51657a;
+    --shadow:0 1px 2px rgba(15,41,66,.06), 0 4px 14px rgba(15,41,66,.05);
+    --r:12px;
   }
   *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--ink);
-    font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
-  header{padding:18px 22px;border-bottom:1px solid var(--line);
-    display:flex;align-items:baseline;gap:16px;flex-wrap:wrap}
-  header h1{font-size:19px;margin:0;letter-spacing:.2px}
+  body{margin:0;background:var(--paper);color:var(--ink);
+    font:14px/1.5 "Segoe UI",-apple-system,BlinkMacSystemFont,Roboto,"Helvetica Neue",Arial,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  .num{font-variant-numeric:tabular-nums}
+  header{background:var(--panel);border-bottom:1px solid var(--line);
+    border-top:3px solid var(--teal);padding:16px 24px;
+    display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header svg{flex:0 0 auto}
+  header h1{font-size:19px;margin:0;font-weight:700;letter-spacing:-.01em}
   header .sub{color:var(--muted);font-size:13px}
-  .mode{margin-left:auto;font-size:12px;color:var(--muted);
-    border:1px solid var(--line);padding:3px 9px;border-radius:999px}
-  main{padding:18px 22px;display:flex;flex-direction:column;gap:18px}
-  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
-  .panel h2{margin:0 0 12px;font-size:13px;text-transform:uppercase;
-    letter-spacing:.08em;color:var(--muted);font-weight:600}
+  .pill{margin-left:auto;font-size:12px;font-weight:600;padding:4px 12px;border-radius:999px;
+    background:var(--teal-soft);color:var(--teal-d)}
+  .pill.bad{background:#fbe9e7;color:#a3392f}
+  main{padding:20px 24px;display:flex;flex-direction:column;gap:18px;max-width:1500px;margin:0 auto}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;
+    padding:18px;box-shadow:var(--shadow)}
+  .panel h2{margin:0 0 14px;font-size:11px;text-transform:uppercase;
+    letter-spacing:.1em;color:var(--muted);font-weight:700}
   /* scrubber */
-  .scrub{display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap}
-  .scrub button{background:var(--chip);color:var(--ink);border:1px solid var(--line);
-    border-radius:7px;padding:6px 12px;font-size:13px;cursor:pointer}
-  .scrub button:hover{border-color:var(--teal)}
-  .scrub button.play{background:var(--teal);border-color:var(--teal);color:#04231d;font-weight:700;min-width:78px}
-  .scrub input[type=range]{flex:1;min-width:160px;accent-color:var(--teal2)}
+  .scrub{display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+  .scrub button{background:var(--panel);color:var(--ink);border:1px solid var(--line);
+    border-radius:9px;padding:7px 12px;font-size:14px;cursor:pointer;line-height:1}
+  .scrub button:hover{border-color:var(--teal);color:var(--teal)}
+  .scrub button:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
+  .scrub button.play{background:var(--teal);border-color:var(--teal);color:#fff;
+    font-weight:700;min-width:92px}
+  .scrub button.play:hover{background:var(--teal-d);color:#fff}
+  .scrub input[type=range]{flex:1;min-width:170px;accent-color:var(--teal)}
   .scrub .status{font-size:13px;color:var(--muted);white-space:nowrap}
-  .scrub .status b{color:var(--teal2)}
+  .scrub .status b{color:var(--ink)}
   /* calendar */
-  .cal{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
-  .day{background:#111c27;border:1px solid var(--line);border-radius:9px;padding:8px;min-height:80px}
-  .day h3{margin:0 0 8px;font-size:12px;color:var(--muted);text-align:center;
-    border-bottom:1px solid var(--line);padding-bottom:6px}
-  .card{background:var(--chip);border-left:3px solid var(--good);border-radius:6px;
-    padding:6px 8px;margin-bottom:7px;font-size:12px;position:relative;transition:box-shadow .2s}
+  .cal{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
+  .day{background:var(--col);border:1px solid var(--line2);border-radius:12px;padding:10px;min-height:90px}
+  .day h3{margin:0 0 10px;font-size:12px;font-weight:700;color:var(--ink);text-align:center;
+    padding-bottom:8px;border-bottom:1px solid var(--line)}
+  .card{background:var(--panel);border:1px solid var(--line2);border-left:4px solid var(--green);
+    border-radius:9px;padding:8px 10px;margin-bottom:8px;font-size:12px;
+    box-shadow:0 1px 1px rgba(15,41,66,.04);transition:box-shadow .2s,transform .2s}
   .card.break{border-left-color:var(--amber)}
-  .card.moved{box-shadow:0 0 0 2px var(--teal2);background:#1c3330}
-  .card .nm{font-weight:600}
-  .card .meta{color:var(--muted);font-size:11px;margin-top:2px;display:flex;
-    gap:6px;flex-wrap:wrap;align-items:center}
-  .acu{background:var(--red);color:#fff;border-radius:4px;padding:0 5px;font-size:10px;font-weight:700}
-  .acu.lo{background:#3b5165}
-  .pin{color:var(--teal2);font-size:10px}
-  .warn{color:var(--amber);font-size:10px}
+  .card.moved{box-shadow:0 0 0 2px var(--teal);transform:translateY(-1px)}
+  .card .nm{font-weight:600;display:flex;align-items:center;gap:6px;justify-content:space-between}
+  .card .meta{color:var(--muted);font-size:11px;margin-top:3px;display:flex;
+    gap:7px;flex-wrap:wrap;align-items:center}
+  .clin{display:inline-flex;align-items:center;gap:4px}
+  .dot{width:7px;height:7px;border-radius:50%;display:inline-block}
+  .acu{color:#fff;border-radius:5px;padding:1px 6px;font-size:10px;font-weight:700;
+    background:var(--red);font-variant-numeric:tabular-nums}
+  .acu.lo{background:var(--slate)}
+  .pin{color:var(--teal);font-size:10px;font-weight:700}
+  .warn{color:var(--amber);font-size:10px;font-weight:600}
   .row2{display:grid;grid-template-columns:1.2fr 1fr;gap:18px}
-  @media(max-width:840px){.cal{grid-template-columns:repeat(2,1fr)}.row2{grid-template-columns:1fr}}
+  @media(max-width:880px){.cal{grid-template-columns:repeat(2,1fr)}.row2{grid-template-columns:1fr}}
+  /* legend */
+  .legend{color:var(--muted);font-size:11.5px;margin-top:12px;display:flex;gap:16px;flex-wrap:wrap}
+  .sw{display:inline-block;width:10px;height:10px;border-radius:3px;vertical-align:middle;margin-right:5px}
   /* ledger */
-  .ledger{max-height:360px;overflow:auto;font-size:13px}
-  .ledger li{list-style:none;padding:9px 11px;border:1px solid var(--line);
-    border-radius:7px;margin-bottom:8px;background:#111c27;border-left:3px solid var(--teal)}
-  .ledger li.fresh{border-left-color:var(--teal2);background:#13241f}
+  .ledger{max-height:380px;overflow:auto;font-size:13px;padding-right:4px}
+  .ledger li{list-style:none;padding:10px 12px;border:1px solid var(--line2);
+    border-left:4px solid var(--teal);border-radius:9px;margin-bottom:9px;background:var(--panel)}
+  .ledger li.fresh{border-left-color:var(--teal);background:var(--teal-soft)}
   .ledger .empty{color:var(--muted)}
   /* scoreboard */
   table{width:100%;border-collapse:collapse;font-size:13px}
-  th,td{padding:8px 6px;text-align:right;border-bottom:1px solid var(--line)}
-  th:first-child,td:first-child{text-align:left;color:var(--muted)}
-  thead th{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.06em}
-  .win{color:var(--teal2);font-weight:700}
-  .gap{margin-top:12px;font-size:13px;color:var(--muted)}
-  .gap b{color:var(--teal2);font-size:18px}
-  .legend{color:var(--muted);font-size:11px;margin-top:10px;display:flex;gap:14px;flex-wrap:wrap}
-  .sw{display:inline-block;width:10px;height:10px;border-radius:2px;vertical-align:middle;margin-right:4px}
+  th,td{padding:9px 6px;text-align:right;border-bottom:1px solid var(--line2);font-variant-numeric:tabular-nums}
+  th:first-child,td:first-child{text-align:left;color:var(--muted);font-variant-numeric:normal}
+  thead th{color:var(--muted);font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:700}
+  .win{color:var(--teal);font-weight:700}
+  .gap{margin-top:14px;font-size:13px;color:var(--muted)}
+  .gap b{color:var(--teal);font-size:20px;font-variant-numeric:tabular-nums}
+  @media(prefers-reduced-motion:reduce){.card{transition:none}}
 </style>
 </head>
 <body>
 <header>
+  <svg width="26" height="26" viewBox="0 0 28 28" aria-hidden="true">
+    <rect x="1" y="1" width="26" height="26" rx="7" fill="#e6f3f0" stroke="#0b6e63" stroke-width="1.5"/>
+    <path d="M4 15 H9 L11 9 L15 19 L17 13 H24" fill="none" stroke="#0b6e63" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>
   <h1>RehabPanel</h1>
   <span class="sub" id="scenario">loading…</span>
-  <span class="mode" id="mode"></span>
+  <span class="pill" id="mode"></span>
 </header>
 <main>
   <section class="panel">
-    <h2>Weekly calendar — watch the society negotiate</h2>
+    <h2>Weekly panel — watch the care team negotiate</h2>
     <div class="scrub">
-      <button id="prev" title="previous round">◀</button>
+      <button id="prev" title="previous round" aria-label="previous round">◀</button>
       <button id="play" class="play">▶ Play</button>
-      <button id="next" title="next round">▶</button>
-      <input type="range" id="slider" min="0" max="0" value="0" step="1">
-      <span class="status" id="status"></span>
+      <button id="next" title="next round" aria-label="next round">▶</button>
+      <input type="range" id="slider" min="0" max="0" value="0" step="1" aria-label="negotiation round">
+      <span class="status num" id="status"></span>
     </div>
     <div class="cal" id="cal"></div>
     <div class="legend">
-      <span><span class="sw" style="background:#1f7a5e"></span>seen by primary clinician</span>
-      <span><span class="sw" style="background:#e0a83d"></span>continuity break</span>
-      <span><span class="sw" style="background:#2bd4b0"></span>moved this round</span>
+      <span><span class="sw" style="background:#2f8f6e"></span>seen by primary clinician</span>
+      <span><span class="sw" style="background:#c28a14"></span>continuity break</span>
+      <span><span class="sw" style="background:#0b6e63"></span>moved this round</span>
+      <span><span class="sw" style="background:#cc4b3e"></span>high acuity (≥7)</span>
       <span><span class="warn">⚠ mode</span> preference mismatch</span>
     </div>
   </section>
@@ -107,7 +131,8 @@
 <script>
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
-let ST, ROUNDS, cur = 0, timer = null;
+const CLIN_COLORS = ['#0b6e63','#2563a8','#9a4fb0','#b06d12','#3a7d44','#a33b5e'];
+let ST, ROUNDS, CLINMAP = {}, cur = 0, timer = null;
 
 fetch('state.json').then(r => r.json()).then(init).catch(e => {
   $('#scenario').textContent = 'Could not load state.json — run `make data && make baseline && make society && make ui` first.';
@@ -116,12 +141,14 @@ fetch('state.json').then(r => r.json()).then(init).catch(e => {
 
 function init(st){
   ST = st;
+  (st.clinicians || []).forEach((c, i) => { CLINMAP[c.id] = CLIN_COLORS[i % CLIN_COLORS.length]; });
   const m = st.meta || {};
   $('#scenario').textContent =
     `${st.counts.patients} patients · ${st.counts.slots} slots · demand/capacity ${m.ratio} · week of ${m.t0}`;
-  $('#mode').textContent = st.scores.society.feasible ? 'plan feasible ✓' : 'INFEASIBLE ✗';
+  const feasible = st.scores.society.feasible;
+  $('#mode').textContent = feasible ? 'plan feasible ✓' : 'INFEASIBLE ✗';
+  $('#mode').className = 'pill' + (feasible ? '' : ' bad');
 
-  // fall back to a single "round" if snapshots are absent
   ROUNDS = (st.rounds && st.rounds.length) ? st.rounds : [{
     round: 0, score: st.scores.society, cells: st.society_cells, ledger: st.ledger, moved: 0
   }];
@@ -136,7 +163,7 @@ function init(st){
 
 function play(){
   if(timer){ stop(); return; }
-  if(cur >= ROUNDS.length - 1) setRound(0);   // restart from the draft
+  if(cur >= ROUNDS.length - 1) setRound(0);
   $('#play').textContent = '⏸ Pause';
   timer = setInterval(() => {
     if(cur >= ROUNDS.length - 1){ stop(); return; }
@@ -167,10 +194,11 @@ function renderCal(R, isDraft){
       const card = document.createElement('div');
       card.className = 'card' + (c.continuity_ok ? '' : ' break') + (fresh ? ' moved' : '');
       const acuCls = c.acuity >= 7 ? 'acu' : 'acu lo';
+      const dot = `<i class="dot" style="background:${CLINMAP[c.clinician_id] || '#5a7287'}"></i>`;
       card.innerHTML =
-        `<div class="nm">${esc(c.patient)} <span class="${acuCls}">A${c.acuity}</span></div>` +
-        `<div class="meta"><span>${c.time}</span><span>${esc(c.clinician)}</span>` +
-        `<span>${c.mode}</span>` +
+        `<div class="nm"><span>${esc(c.patient)}</span><span class="${acuCls}">A${c.acuity}</span></div>` +
+        `<div class="meta"><span class="num">${c.time}</span>` +
+        `<span class="clin">${dot}${esc(c.clinician)}</span><span>${c.mode}</span>` +
         (fresh ? '<span class="pin">↔ moved</span>' : '') +
         (c.pref_ok ? '' : '<span class="warn">⚠ mode</span>') + `</div>`;
       col.appendChild(card);
@@ -184,7 +212,8 @@ function renderLedger(R){
   if(!R.ledger.length){
     led.innerHTML = '<li class="empty">No rulings yet — press ▶ Play to negotiate.</li>'; return;
   }
-  const freshSet = new Set(ROUNDS[cur].ledger.slice(cur > 0 ? ROUNDS[cur-1].ledger.length : 0));
+  const freshStart = cur > 0 ? ROUNDS[cur-1].ledger.length : 0;
+  const freshSet = new Set(R.ledger.slice(freshStart));
   R.ledger.forEach(line => {
     const li = document.createElement('li');
     if(freshSet.has(line)) li.className = 'fresh';
