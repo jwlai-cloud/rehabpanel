@@ -1,4 +1,4 @@
-.PHONY: data baseline society benchmark ui demo video test
+.PHONY: data baseline society benchmark ui demo video serve test
 SEED ?= 7
 RATIO ?= 1.3
 
@@ -25,3 +25,6 @@ demo: ui     ## build ui state, then launch the 3-panel demo UI (http://localhos
 
 video:       ## render the demo video -> results/demo.mp4 (macOS: say + ffmpeg + Chrome)
 	bash scripts/make_video.sh
+
+serve:       ## run the coordinator app backend (http://localhost:8000)
+	uvicorn rehabpanel.api:app --reload --port 8000
