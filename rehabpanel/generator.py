@@ -93,7 +93,11 @@ def _patients(fk, rng, n, clinicians):
     return out
 
 
-def generate(seed=7, ratio=1.3, n_clinicians=3):
+def generate(seed=7, ratio=1.3, n_clinicians=3, write=True):
+    """Build a seeded synthetic caseload. Returns the in-memory tables dict
+    {patients, clinicians, slots, encounters, meta} so the backend can run
+    key-free without touching disk; with write=True (CLI default) it also writes
+    data/*.json so `make data` / the file-based pipeline keep working."""
     rng = random.Random(seed)
     fk = Faker(); Faker.seed(seed)
     clinicians = _clinicians(fk, rng, n_clinicians)
@@ -105,17 +109,17 @@ def generate(seed=7, ratio=1.3, n_clinicians=3):
         "clinician_id": p["primary_clinician_id"], "date": p["last_seen_date"],
         "type": "clinic", "outcome": rng.choice(["progressing", "stable", "regressed"]),
     } for i, p in enumerate(patients)]
-
-    DATA.mkdir(exist_ok=True)
-    for name, rows in [("patients", patients), ("clinicians", clinicians),
-                       ("slots", slots), ("encounters", encounters)]:
-        (DATA / f"{name}.json").write_text(json.dumps(rows, indent=2))
     meta = {"seed": seed, "ratio": ratio, "n_patients": len(patients),
             "n_slots": len(slots), "t0": T0.isoformat(), "horizon_days": HORIZON_DAYS}
-    (DATA / "meta.json").write_text(json.dumps(meta, indent=2))
+    tables = {"patients": patients, "clinicians": clinicians, "slots": slots,
+              "encounters": encounters, "meta": meta}
+    if write:
+        DATA.mkdir(exist_ok=True)
+        for name in ("patients", "clinicians", "slots", "encounters", "meta"):
+            (DATA / f"{name}.json").write_text(json.dumps(tables[name], indent=2))
     print(f"generated: {len(patients)} patients vs {len(slots)} slots "
           f"(ratio {ratio}) seed {seed}")
-    return meta
+    return tables
 
 
 if __name__ == "__main__":

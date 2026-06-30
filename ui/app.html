@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RehabPanel — Coordinator</title>
+<style>
+  :root{
+    --paper:#eef3f7; --panel:#fff; --ink:#0f2942; --muted:#5a7287; --line:#dde6ee;
+    --line2:#e9eff5; --col:#f5f8fb; --teal:#0b6e63; --teal-d:#085a51; --teal-soft:#e6f3f0;
+    --red:#cc4b3e; --amber:#c28a14; --green:#2f8f6e; --slate:#51657a;
+    --shadow:0 1px 2px rgba(15,41,66,.06),0 4px 14px rgba(15,41,66,.05);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);
+    font:14px/1.5 "Segoe UI",-apple-system,BlinkMacSystemFont,Roboto,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+  .num{font-variant-numeric:tabular-nums}
+  header{background:var(--panel);border-bottom:1px solid var(--line);border-top:3px solid var(--teal);
+    padding:12px 20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:800}
+  header .sub{color:var(--muted);font-size:13px}
+  .gap-badge{margin-left:auto;background:var(--teal-soft);color:var(--teal-d);font-weight:700;
+    padding:5px 12px;border-radius:999px;font-size:13px}
+  button{font:inherit;cursor:pointer;border-radius:9px;border:1px solid var(--line);background:var(--panel);
+    color:var(--ink);padding:7px 12px}
+  button:hover{border-color:var(--teal);color:var(--teal)}
+  button.primary{background:var(--teal);border-color:var(--teal);color:#fff;font-weight:700}
+  button.primary:hover{background:var(--teal-d);color:#fff}
+  button.danger:hover{border-color:var(--red);color:var(--red)}
+  nav{display:flex;gap:6px;padding:10px 20px 0;flex-wrap:wrap}
+  nav button{border-radius:9px 9px 0 0;border-bottom:none;color:var(--muted)}
+  nav button.active{background:var(--teal);color:#fff;border-color:var(--teal);font-weight:700}
+  .bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:12px 20px;background:var(--panel);
+    border-bottom:1px solid var(--line)}
+  .bar .lbl{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.08em;font-weight:700}
+  .alerts{display:flex;gap:8px;flex-wrap:wrap;padding:0 20px;margin-top:10px}
+  .alert{font-size:12.5px;padding:5px 11px;border-radius:8px;border:1px solid}
+  .alert.incident{background:#fff4e5;border-color:#f0c27a;color:#8a5a12}
+  .alert.critical{background:#fbe9e7;border-color:#e9a99f;color:#a3392f}
+  .alert.warn{background:#fff8e6;border-color:#ecd28a;color:#866a12}
+  main{padding:16px 20px;display:flex;flex-direction:column;gap:16px;max-width:1500px;margin:0 auto}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;box-shadow:var(--shadow)}
+  .panel h2{margin:0 0 12px;font-size:11px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);font-weight:700}
+  .grid2{display:grid;grid-template-columns:1.25fr .9fr;gap:16px}
+  @media(max-width:900px){.grid2{grid-template-columns:1fr}}
+  /* calendar */
+  .scrub{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+  .scrub input[type=range]{flex:1;min-width:150px;accent-color:var(--teal)}
+  .scrub .status{font-size:13px;color:var(--muted)} .scrub .status b{color:var(--ink)}
+  .cal{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+  .day{background:var(--col);border:1px solid var(--line2);border-radius:10px;padding:8px;min-height:60px}
+  .day h3{margin:0 0 8px;font-size:12px;font-weight:700;text-align:center;padding-bottom:6px;border-bottom:1px solid var(--line)}
+  .card{background:var(--panel);border:1px solid var(--line2);border-left:4px solid var(--green);border-radius:8px;
+    padding:6px 8px;margin-bottom:6px;font-size:12px}
+  .card.brk{border-left-color:var(--amber)} .card.moved{box-shadow:0 0 0 2px var(--teal)}
+  .card .nm{font-weight:600;display:flex;justify-content:space-between;gap:6px}
+  .card .meta{color:var(--muted);font-size:11px;margin-top:2px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  .acu{color:#fff;background:var(--red);border-radius:5px;padding:0 5px;font-size:10px;font-weight:700}
+  .acu.lo{background:var(--slate)}
+  .dot{width:7px;height:7px;border-radius:50%;display:inline-block}
+  .pin{color:var(--teal);font-size:10px;font-weight:700} .warn{color:var(--amber);font-size:10px}
+  /* agents */
+  .agents{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+  .agent{border:1px solid var(--line2);border-radius:9px;padding:8px 10px;background:var(--col)}
+  .agent .an{font-weight:700;text-transform:capitalize}
+  .agent.ref{grid-column:1/-1;background:var(--teal-soft);border-color:#bfe0d8}
+  .agent .ao{color:var(--muted);font-size:12px} .agent .at{font-size:10.5px;color:var(--teal-d);font-weight:700}
+  /* log */
+  .log{max-height:300px;overflow:auto;font-size:12.5px} .log li{list-style:none;padding:8px 10px;border:1px solid var(--line2);
+    border-left:3px solid var(--teal);border-radius:8px;margin-bottom:7px;background:var(--panel)}
+  .log li.fresh{background:var(--teal-soft)} .log .obj{color:var(--muted);font-size:11px}
+  /* tables */
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{padding:7px 8px;border-bottom:1px solid var(--line2);text-align:left}
+  th{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.05em}
+  td.r,th.r{text-align:right;font-variant-numeric:tabular-nums}
+  tr.clickable:hover{background:var(--col);cursor:pointer}
+  .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+  .tile{border:1px solid var(--line2);border-radius:11px;padding:12px 14px;background:var(--col)}
+  .tile .v{font-size:24px;font-weight:800;font-variant-numeric:tabular-nums} .tile .k{color:var(--muted);font-size:12px}
+  .tile .v.good{color:var(--teal)} .tile .v.bad{color:var(--red)}
+  /* sliders */
+  .rule{display:grid;grid-template-columns:130px 1fr 48px;gap:12px;align-items:center;margin-bottom:12px}
+  .rule input{width:100%;accent-color:var(--teal)}
+  /* gauge bars */
+  .gbar{height:14px;background:var(--line2);border-radius:7px;overflow:hidden;margin:4px 0 2px}
+  .gbar > i{display:block;height:100%;background:var(--teal)}
+  .gbar > i.hot{background:var(--red)}
+  .muted{color:var(--muted)} .right{margin-left:auto}
+  svg .base{stroke:var(--slate);stroke-dasharray:4 3} svg .ln{stroke:var(--teal);fill:none;stroke-width:2.5}
+  svg .dotp{fill:var(--teal)} svg text{fill:var(--muted);font-size:11px}
+</style>
+</head>
+<body>
+<header>
+  <svg width="24" height="24" viewBox="0 0 28 28" aria-hidden="true"><rect x="1" y="1" width="26" height="26" rx="7" fill="#e6f3f0" stroke="#0b6e63" stroke-width="1.5"/><path d="M4 15 H9 L11 9 L15 19 L17 13 H24" fill="none" stroke="#0b6e63" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <h1>RehabPanel <span class="muted" style="font-weight:500">· Coordinator</span></h1>
+  <span class="sub" id="scenario">loading…</span>
+  <span class="gap-badge" id="gap"></span>
+  <button id="reset">↺ Reset</button>
+</header>
+<nav id="nav"></nav>
+<div class="bar">
+  <span class="lbl">Incident</span>
+  <button class="danger" onclick="act('POST','/incident/sick')">🤒 Nurse sick</button>
+  <button class="danger" onclick="act('POST','/incident/cancel')">✕ Patient cancels</button>
+  <button class="danger" onclick="act('POST','/incident/referral')">＋ Urgent referral</button>
+  <button class="primary right" onclick="act('POST','/replan')">⟳ Re-plan</button>
+</div>
+<div class="alerts" id="alerts"></div>
+<main id="main"></main>
+<script>
+const $=s=>document.querySelector(s), esc=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const CLR=['#0b6e63','#2563a8','#9a4fb0','#b06d12','#3a7d44','#a33b5e']; let CMAP={};
+const VIEWS=[['schedule','Schedule'],['caseload','Caseload'],['team','Team'],['rules','Rules'],['kpis','KPIs']];
+let ST=null, view='schedule', cur=0, timer=null;
+
+const api=(m,p,b)=>fetch('/api'+p,{method:m,headers:{'Content-Type':'application/json'},
+  body:b?JSON.stringify(b):undefined}).then(r=>r.json());
+
+async function boot(){ ST=await fetch('/api/state').then(r=>r.json()); init(); }
+async function act(m,p,b){ stop(); ST=await api(m,p,b); cur=ST.rounds.length-1; render(); }
+function init(){
+  (ST.clinicians||[]).forEach((c,i)=>CMAP[c.id]=CLR[i%CLR.length]);
+  $('#reset').onclick=()=>act('POST','/reset');
+  $('#nav').innerHTML=VIEWS.map(([k,l])=>`<button data-v="${k}">${l}</button>`).join('');
+  $('#nav').querySelectorAll('button').forEach(b=>b.onclick=()=>{view=b.dataset.v;location.hash=view;stop();render();});
+  const h=location.hash.slice(1); if(VIEWS.some(v=>v[0]===h))view=h;   // deep-link to a view
+  cur=ST.rounds.length-1;
+  const rp=new URLSearchParams(location.search).get('r'); if(rp!==null)cur=Math.max(0,+rp);  // deep-link a round
+  render();
+}
+function render(){
+  const m=ST.meta;
+  $('#scenario').textContent=`${ST.counts.patients} patients · ${ST.counts.slots} slots · demand/capacity ${m.ratio} · week of ${m.t0}`;
+  $('#gap').textContent=`initial gap vs single agent: +${ST.headline_gap}`;
+  $('#nav').querySelectorAll('button').forEach(b=>b.classList.toggle('active',b.dataset.v===view));
+  $('#alerts').innerHTML=(ST.alerts||[]).map(a=>`<span class="alert ${a.level}">${esc(a.msg)}</span>`).join('');
+  ({schedule:vSchedule,caseload:vCaseload,team:vTeam,rules:vRules,kpis:vKpis}[view])();
+}
+
+/* ---------- Schedule + Negotiation ---------- */
+function vSchedule(){
+  const R=ST.rounds, last=R.length-1; if(cur>last)cur=last;
+  $('#main').innerHTML=`
+   <div class="panel">
+     <h2>Negotiation — watch the society re-plan</h2>
+     <div class="scrub">
+       <button onclick="step(-1)">◀</button><button class="primary" id="play" onclick="play()">▶ Play</button>
+       <button onclick="step(1)">▶</button>
+       <input type="range" id="sl" min="0" max="${last}" value="${cur}" oninput="setR(+this.value)">
+       <span class="status num" id="st"></span>
+     </div>
+     <div class="cal" id="cal"></div>
+   </div>
+   <div class="grid2">
+     <div class="panel"><h2>Conflict ledger — referee rulings</h2><ul class="log" id="log"></ul></div>
+     <div class="panel">
+       <h2>Agent society</h2><div class="agents">${ST.agents.map(a=>`
+         <div class="agent ${a.name==='referee'?'ref':''}"><div class="an">${a.name}</div>
+           <div class="ao">${esc(a.objective)}</div><div class="at">${a.tier}</div></div>`).join('')}</div>
+       <h2 style="margin-top:16px">Score per round vs single-agent baseline</h2>
+       <div id="spark"></div>
+     </div>
+   </div>`;
+  setR(cur);
+}
+function setR(i){ cur=i; const R=ST.rounds[i], last=ST.rounds.length-1, draft=R.round===0;
+  $('#sl').value=i;
+  $('#st').innerHTML=`Round <b>${R.round}</b>/${ST.rounds[last].round} · value <b>${R.score.value}</b>`+
+    (draft?' · acuity-first draft':` · ${R.moved} moved · ${objText(R.objections)}`);
+  // calendar
+  $('#cal').innerHTML=ST.days.map(d=>`<div class="day"><h3>${d}</h3>`+
+    R.cells.filter(c=>c.day===d).map(c=>card(c,!draft&&c.round===R.round)).join('')+`</div>`).join('');
+  // ledger (cumulative, last fresh)
+  const fresh=new Set(R.ledger.slice(i>0?ST.rounds[i-1].ledger.length:0));
+  $('#log').innerHTML=R.ledger.length?R.ledger.map(l=>`<li class="${fresh.has(l)?'fresh':''}">${esc(l)}</li>`).join('')
+    :'<li class="muted">No rulings yet.</li>';
+  $('#log').scrollTop=$('#log').scrollHeight;
+  $('#spark').innerHTML=spark(ST.rounds.map(r=>r.score.value), ST.scores.baseline.value);
+}
+function objText(o){ const e=Object.entries(o||{}); return e.length?'['+e.map(([k,v])=>`${k}×${v}`).join(', ')+']':''; }
+function card(c,moved){ const a=c.acuity>=7?'acu':'acu lo';
+  return `<div class="card ${c.continuity_ok?'':'brk'} ${moved?'moved':''}">
+   <div class="nm"><span>${esc(c.patient)}</span><span class="${a}">A${c.acuity}</span></div>
+   <div class="meta"><span class="num">${c.time}</span>
+   <span><i class="dot" style="background:${CMAP[c.clinician_id]||'#5a7287'}"></i> ${esc(c.clinician)}</span>
+   <span>${c.mode}</span>${moved?'<span class="pin">↔</span>':''}${c.pref_ok?'':'<span class="warn">⚠</span>'}</div></div>`; }
+function step(d){ stop(); setR(Math.max(0,Math.min(ST.rounds.length-1,cur+d))); }
+function play(){ if(timer)return stop(); if(cur>=ST.rounds.length-1)setR(0); $('#play').textContent='⏸ Pause';
+  timer=setInterval(()=>{ if(cur>=ST.rounds.length-1)return stop(); setR(cur+1); },1000); }
+function stop(){ if(timer){clearInterval(timer);timer=null;} const p=$('#play'); if(p)p.textContent='▶ Play'; }
+
+/* SVG sparkline */
+function spark(vals, base){ const W=440,H=150,pad=28; const lo=Math.min(base,...vals),hi=Math.max(base,...vals);
+  const x=i=>pad+i*(W-2*pad)/Math.max(1,vals.length-1), y=v=>H-pad-(v-lo)/((hi-lo)||1)*(H-2*pad);
+  const pts=vals.map((v,i)=>`${x(i)},${y(v)}`).join(' ');
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%"><line class="base" x1="${pad}" y1="${y(base)}" x2="${W-pad}" y2="${y(base)}"/>
+   <text x="${W-pad}" y="${y(base)-5}" text-anchor="end">baseline ${base}</text>
+   <polyline class="ln" points="${pts}"/>${vals.map((v,i)=>`<circle class="dotp" cx="${x(i)}" cy="${y(v)}" r="3"/>`).join('')}
+   <text x="${pad}" y="${H-6}">draft</text><text x="${W-pad}" y="${H-6}" text-anchor="end">round ${vals.length-1}</text></svg>`; }
+
+/* ---------- Caseload ---------- */
+function vCaseload(){ const P=[...ST.patients].sort((a,b)=>b.acuity-a.acuity);
+  $('#main').innerHTML=`<div class="panel"><h2>Caseload — ${P.length} patients (${ST.counts.scheduled} scheduled)</h2>
+   <table><thead><tr><th>Patient</th><th>Program</th><th class="r">Acuity</th><th>Primary</th><th>Pref</th><th>Due</th><th>Status</th></tr></thead>
+   <tbody>${P.map(p=>`<tr class="clickable" onclick='drill(${JSON.stringify(p.id)})'>
+     <td>${esc(p.name)}</td><td>${p.program}</td><td class="r"><span class="acu ${p.acuity>=7?'':'lo'}">A${p.acuity}</span></td>
+     <td><i class="dot" style="background:${CMAP[p.primary]||'#5a7287'}"></i> ${p.primary}</td><td>${p.pref}</td>
+     <td class="num">${p.due}</td><td>${p.scheduled?'<span style="color:var(--teal)">scheduled</span>':'<span class="warn">backlog</span>'}</td>
+   </tr>`).join('')}</tbody></table><div id="drill"></div></div>`; }
+function drill(id){ const p=ST.patients.find(x=>x.id===id); if(!p)return;
+  $('#drill').innerHTML=`<div class="tile" style="margin-top:14px"><div class="k">${p.id}</div>
+   <div style="font-size:18px;font-weight:700">${esc(p.name)} · A${p.acuity} · ${p.program}</div>
+   <div class="muted">primary ${p.primary} · prefers ${p.pref} · follow-up due ${p.due} · ${p.scheduled?'scheduled this week':'in backlog'}</div></div>`; }
+
+/* ---------- Team ---------- */
+function vTeam(){ const cap=ST.capacity;
+  $('#main').innerHTML=`<div class="panel"><h2>Care team — roster & capacity</h2>
+   <table><thead><tr><th>Clinician</th><th>Status</th><th class="r">Booked</th><th class="r">Capacity</th><th class="r">Utilization</th></tr></thead>
+   <tbody>${ST.clinicians.map(c=>{const u=cap.per.find(x=>x.id===c.id)||{used:0,pct:0};
+     return `<tr><td><i class="dot" style="background:${CMAP[c.id]}"></i> ${esc(c.name)} <span class="muted">${c.id}</span></td>
+     <td>${c.status==='available'?'<span style="color:var(--teal)">available</span>':'<span class="warn">'+esc(c.status)+'</span>'}</td>
+     <td class="r num">${u.used}</td><td class="r num">${c.cap}</td>
+     <td class="r"><div class="gbar"><i class="${u.pct>100?'hot':''}" style="width:${Math.min(100,u.pct)}%"></i></div>${u.pct}%</td></tr>`;}).join('')}
+   </tbody></table>
+   <p class="muted" style="margin-top:12px">Mark a nurse out via <b>Incident → Nurse sick</b>, then <b>Re-plan</b> — the society re-homes their patients with minimal disruption.</p></div>`; }
+
+/* ---------- Rules ---------- */
+function vRules(){ const w=ST.weights;
+  const row=(k,lbl,max)=>`<div class="rule"><label>${lbl}</label>
+    <input type="range" min="0" max="${max}" step="0.5" value="${w[k]}" oninput="this.nextElementSibling.textContent=this.value" data-k="${k}">
+    <span class="num">${w[k]}</span></div>`;
+  $('#main').innerHTML=`<div class="panel"><h2>Priority rule — what the society optimizes</h2>
+   ${row('acuity','Acuity coverage',20)}${row('overdue','Overdue penalty',5)}
+   ${row('continuity','Continuity',10)}${row('pref','Preference',6)}
+   <button class="primary" onclick="applyRules()">Apply & re-plan</button>
+   <p class="muted" style="margin-top:12px">Weights drive both the score and the agents' priorities — raise Continuity and the society protects primary-nurse matches harder; drop it to zero and it stops trading for them.</p></div>`; }
+function applyRules(){ const b={}; document.querySelectorAll('.rule input').forEach(i=>b[i.dataset.k]=+i.value);
+  act('POST','/rules',b); }
+
+/* ---------- KPIs ---------- */
+function vKpis(){ const s=ST.scores.committed, b=ST.scores.baseline, cap=ST.capacity, d=ST.disruption;
+  const tile=(k,v,cls='')=>`<div class="tile"><div class="v ${cls}">${v}</div><div class="k">${k}</div></div>`;
+  $('#main').innerHTML=`
+   <div class="panel"><h2>This week — KPIs</h2><div class="tiles">
+     ${tile('Schedule value',s.value,s.value>=b.value?'good':'bad')}
+     ${tile('Capacity used',cap.overall_pct+'%')}
+     ${tile('High-acuity seen',s.acuity_coverage>=1?'100%':Math.round(s.acuity_coverage*100)+'%')}
+     ${tile('Continuity breaks',s.continuity_breaks)}
+     ${tile('Overdue days',s.overdue_days)}
+     ${tile('Pref mismatches',s.preference_mismatches)}
+     ${d?tile('Replan disruption',d.changed+'/'+d.total,'good'):''}
+   </div></div>
+   <div class="grid2">
+     <div class="panel"><h2>Session timeline — incidents drop, re-plans recover</h2><div id="sess"></div></div>
+     <div class="panel"><h2>Capacity by clinician</h2>${cap.per.map(c=>`
+       <div style="margin-bottom:8px"><div style="display:flex"><span>${esc(c.name)}</span><span class="right num">${c.used}/${c.cap}</span></div>
+       <div class="gbar"><i class="${c.pct>100?'hot':''}" style="width:${Math.min(100,c.pct)}%"></i></div></div>`).join('')}
+     </div>
+   </div>`;
+  $('#sess').innerHTML=sessChart(ST.score_history);
+}
+function sessChart(h){ const W=440,H=170,pad=34; const vals=h.map(p=>p.value);
+  const lo=Math.min(...vals),hi=Math.max(...vals);
+  const x=i=>pad+i*(W-2*pad)/Math.max(1,h.length-1), y=v=>H-pad-(v-lo)/((hi-lo)||1)*(H-2*pad);
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%"><polyline class="ln" points="${h.map((p,i)=>`${x(i)},${y(p.value)}`).join(' ')}"/>
+   ${h.map((p,i)=>`<circle class="dotp" cx="${x(i)}" cy="${y(p.value)}" r="3"/>
+   <text x="${x(i)}" y="${H-8}" text-anchor="middle">${esc(p.label)}</text>
+   <text x="${x(i)}" y="${y(p.value)-8}" text-anchor="middle">${p.value}</text>`).join('')}</svg>`; }
+
+boot();
+</script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+.git
+.venv
+**/__pycache__
+data
+results
+.videobuild
+docs
+tests
+scripts
+*.mp4
+.github
+.claude

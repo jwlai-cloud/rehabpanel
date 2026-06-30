@@ -1,0 +1,29 @@
+flowchart LR
+    subgraph UI["Coordinator SPA — ui/app.html"]
+        V["5 views: Schedule/Negotiation ·<br/>Caseload · Team · Rules · KPIs"]
+        INC["Incident buttons:<br/>sick · cancel · referral"]
+        RP["Re-plan"]
+    end
+
+    subgraph API["FastAPI — api.py (in-memory session)"]
+        EP["/api state · incident · replan · rules · reset"]
+        SVC["CoordinatorService<br/>over Store interface<br/>(InMemory now · DB later)"]
+        EP --> SVC
+    end
+
+    subgraph ENG["Engine — in-memory, no file IO"]
+        NEG["orchestrator.negotiate(tables, seed_draft, weights)<br/>WARM-START repair · emits per-round objections"]
+        BAS["baseline.plan — single agent (cold)"]
+        SCO["scorer.score — pure Python, CI-locked"]
+    end
+
+    V -- "GET /state" --> EP
+    INC -- "POST /incident · drops live score" --> EP
+    RP -- "POST /replan · warm" --> EP
+    SVC --> NEG
+    SVC --> BAS
+    SVC --> SCO
+    NEG -. "live Qwen / deterministic offline" .-> Q["Qwen Cloud<br/>dashscope-intl (Alibaba)"]
+    SVC -- "state: plan · rounds(objections+score) ·<br/>KPIs · disruption · alerts" --> V
+
+    LOOP["Incident → score drops → Re-plan (warm) →<br/>society re-negotiates → score recovers with<br/>MINIMAL DISRUPTION (the replan win)"]

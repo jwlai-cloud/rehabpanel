@@ -18,8 +18,9 @@ make data        # seeded synthetic caseload (set scarcity: RATIO=1.3)
 make baseline    # single-agent scheduler
 make society     # multi-agent negotiation -> schedule + conflict ledger
 make benchmark   # baseline vs society across seeds + a scarcity sweep
-make demo        # 3-panel UI at http://localhost:8000 (scrub the negotiation)
-make test        # scorer unit tests
+make serve       # coordinator app at http://localhost:8000 (live backend)
+make demo        # static 3-panel scrub UI at http://localhost:8000
+make test        # unit tests
 ```
 
 > Runs **key-free** by default: with no `DASHSCOPE_API_KEY`, a deterministic
@@ -44,16 +45,35 @@ The society out-scores the single agent on **every run**, and the advantage
 wins by repairing continuity and preference that the single agent abandons, while
 holding high-acuity coverage constant.
 
+## Coordinator app (`make serve`)
+A multi-view app where the agent society **assists a nurse coordinator**: see the
+**Caseload** and **Team**, set the **priority Rule** (causal weight sliders),
+watch the **Schedule** negotiate round-by-round, and track **KPIs**. When reality
+breaks — a nurse calls in **sick**, a patient **cancels**, an **urgent referral**
+arrives — the live score drops; **Re-plan** runs a *warm* negotiation that
+repairs only what broke. Two measurable gains:
+- **Initial plan:** society value > single-agent baseline (the table above).
+- **After a disruption:** the society recovers with **minimal disruption**
+  (e.g. 4/39 appointments changed) — see `docs/architecture_app.svg`.
+
+FastAPI backend (`rehabpanel/api.py`) over an in-memory session; the SPA is
+`ui/app.html`. Runs key-free (deterministic) or on live Qwen with a key.
+Containerised: `make docker-build && make docker-run` — deploy to Alibaba Cloud
+per `docs/deploy.md`.
+
 ## How it works
-See `docs/RehabPanel_Design_Doc.md` and the architecture diagram
-(`docs/architecture.svg`). The deterministic scorer (`rehabpanel/scorer.py`)
+See `docs/RehabPanel_Design_Doc.md` and the architecture diagrams
+(`docs/architecture.svg` engine · `docs/architecture_app.svg` coordinator app).
+The deterministic scorer (`rehabpanel/scorer.py`)
 evaluates both pipelines with the same objective function, so the measured gain
 is reproducible: `make benchmark` regenerates every number.
 
 ## Docs
 - `docs/RehabPanel_Design_Doc.md` — design + ADRs
-- `docs/spec_negotiation.md` — negotiation build spec
+- `docs/spec_negotiation.md` — negotiation engine spec
+- `docs/spec_coordinator_app.md` — coordinator-app redesign spec
 - `docs/SUBMISSION.md` — submission packet + video script
+- `docs/deploy.md` — container + Alibaba Cloud deploy
 - `docs/BUILD_LOG.md` — running build record
 
 ## Qwen Cloud

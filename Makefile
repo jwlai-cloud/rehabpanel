@@ -1,4 +1,4 @@
-.PHONY: data baseline society benchmark ui demo video test
+.PHONY: data baseline society benchmark ui demo video serve docker-build docker-run test
 SEED ?= 7
 RATIO ?= 1.3
 
@@ -25,3 +25,12 @@ demo: ui     ## build ui state, then launch the 3-panel demo UI (http://localhos
 
 video:       ## render the demo video -> results/demo.mp4 (macOS: say + ffmpeg + Chrome)
 	bash scripts/make_video.sh
+
+serve:       ## run the coordinator app backend (http://localhost:8000)
+	uvicorn rehabpanel.api:app --reload --port 8000
+
+docker-build: ## build the coordinator app container
+	docker build -t rehabpanel .
+
+docker-run:  ## run the container (http://localhost:8000); add -e DASHSCOPE_API_KEY for live Qwen
+	docker run --rm -p 8000:8000 rehabpanel

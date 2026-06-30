@@ -84,6 +84,23 @@ def _open_slots(ctx, draft):
     return [s for s in ctx["slots"] if s["slot_id"] not in used]
 
 
+# Scorer's default weights — used to scale advocate severity so the Rules view is
+# causal: a weight near 0 drops that objective below SEVERITY_EXIT (the referee
+# ignores it), a raised weight makes it outrank others. With no weights passed,
+# severities are unchanged (default behaviour).
+_DEFAULT_W = {"acuity": 10.0, "overdue": 1.0, "continuity": 4.0, "pref": 2.0}
+
+
+def _scale(ctx, key, base):
+    w = ctx.get("weights") or {}
+    if key not in w:
+        return base
+    d = _DEFAULT_W.get(key, w[key])   # reference weight (the default for known objectives)
+    if not d:                         # no positive reference to scale against -> leave unscaled
+        return base
+    return max(0, min(10, round(base * (w[key] / d))))
+
+
 # ---- deterministic critique per objective ----------------------------------
 
 def _crit_priority(draft, ctx):
@@ -92,7 +109,7 @@ def _crit_priority(draft, ctx):
     for p in ctx["patients"]:
         if p["acuity_score"] >= ACUITY_HIGH and p["patient_id"] not in assigned:
             out.append({"patient_id": p["patient_id"], "slot_id": None,
-                        "severity": min(10, p["acuity_score"]),
+                        "severity": _scale(ctx, "acuity", min(10, p["acuity_score"])),
                         "reason": f"acuity {p['acuity_score']}, unscheduled"})
     return out
 
@@ -105,7 +122,7 @@ def _crit_window(draft, ctx):
         od = _overdue_days(p, t0)
         if od > 0 and p["patient_id"] not in assigned:
             out.append({"patient_id": p["patient_id"], "slot_id": None,
-                        "severity": min(10, max(1, od)),
+                        "severity": _scale(ctx, "overdue", min(10, max(1, od))),
                         "reason": f"{od} days overdue, unscheduled"})
     return out
 
@@ -120,7 +137,7 @@ def _crit_continuity(draft, ctx):
             continue
         if slot["clinician_id"] != p["primary_clinician_id"]:
             out.append({"patient_id": p["patient_id"], "slot_id": a["slot_id"],
-                        "severity": 5,
+                        "severity": _scale(ctx, "continuity", 5),
                         "reason": f"primary {p['primary_clinician_id']}, assigned {slot['clinician_id']}"})
     return out
 
@@ -135,7 +152,7 @@ def _crit_preference(draft, ctx):
             continue
         if slot["mode"] != p["preferred_mode"]:
             out.append({"patient_id": p["patient_id"], "slot_id": a["slot_id"],
-                        "severity": 3,
+                        "severity": _scale(ctx, "pref", 3),
                         "reason": f"prefers {p['preferred_mode']}, booked {slot['mode']}"})
     return out
 
@@ -238,24 +255,33 @@ def _swap_preference(objection, ctx, draft):
 
 
 def _swap_seat(objection, ctx, draft, kind):
-    """priority/window: seat an unscheduled patient into an OPEN slot. We do NOT
-    displace a seated patient — at scarcity that is near zero-sum and can regress
-    the score, so the deterministic negotiator only seats when capacity exists
-    (i.e. demand_capacity_ratio < 1). Pure gain when it fires."""
+    """priority/window: seat an unscheduled patient. Prefer an OPEN slot
+    (preferring their primary clinician). If the week is full, displace the
+    lowest-acuity seated patient this one STRICTLY outranks on acuity — which
+    improves or holds acuity coverage. This is the incident-recovery lever: at
+    the initial plan the unscheduled are already the lowest acuity so nothing
+    fires, but a patient orphaned by an incident (previously seated, higher
+    acuity) can bump the weakest seated to get care back."""
     P = _index(ctx["patients"], "patient_id")
     pid = objection.get("patient_id")
     p = P.get(pid)
     if not p:
         return None
     s = _open_slots(ctx, draft)
-    if not s:
-        return None
-    # prefer an open slot with the patient's primary clinician, then any
-    primary = p["primary_clinician_id"]
-    best = next((sl for sl in s if sl["clinician_id"] == primary), s[0])
-    return {"move": {"patient_id": pid, "slot_id": best["slot_id"]},
-            "marginal_value": float(min(10, p["acuity_score"])),
-            "reason": f"seat {pid} ({kind}) in open slot"}
+    if s:
+        primary = p["primary_clinician_id"]
+        best = next((sl for sl in s if sl["clinician_id"] == primary), s[0])
+        return {"move": {"patient_id": pid, "slot_id": best["slot_id"]},
+                "marginal_value": float(min(10, p["acuity_score"])),
+                "reason": f"seat {pid} ({kind}) in open slot"}
+    seated = sorted((P[a["patient_id"]]["acuity_score"], a["slot_id"], a["patient_id"])
+                    for a in draft if a["patient_id"] in P)
+    if seated and p["acuity_score"] > seated[0][0]:
+        acu_l, sid_l, qid = seated[0]
+        return {"move": {"patient_id": pid, "slot_id": sid_l},
+                "marginal_value": float(min(10, p["acuity_score"])),
+                "reason": f"seat {pid} (acuity {p['acuity_score']}) over {qid} (acuity {acu_l})"}
+    return None
 
 
 # ---- the advocate ----------------------------------------------------------
