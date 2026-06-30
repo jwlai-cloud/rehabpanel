@@ -49,4 +49,12 @@ society hits its swap/round ceiling. Society's win comes from continuity (e.g.
 30→13 breaks) + same-clinician preference fixes, holding acuity coverage at
 24/24. Locked as `tests/test_negotiation.py`. Suite: 13 passed.
 
+### Benchmark chart (step 4)
+- `benchmark.py` now writes `results/gap.png` (matplotlib, Agg) alongside
+  `metrics.json`: mean society−baseline gap vs ratio, with a seed min–max band,
+  `demand=capacity` marker, and zero line. Respects `is_offline()` (default
+  offline = free + reproducible; warns if run live).
+- 5 seeds × 5 ratios = 25 runs, all feasible, min gap +33 (society wins every
+  single run): 0.8→46, 1.0→64, 1.2→65, 1.4→72, 1.6→66.
+
 <!-- next entries appended below as steps land -->
