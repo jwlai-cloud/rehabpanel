@@ -67,20 +67,25 @@ def _greedy(patients, slots):
     return out
 
 
+def plan(patients, clinicians, slots, weights=None):
+    """In-memory single-agent plan (no file IO). Offline = acuity-first greedy;
+    online = one Qwen pass, parsed + validated, re-prompted once if malformed."""
+    if is_offline():
+        return _greedy(patients, slots)
+    prompt = build_prompt(patients, clinicians, slots)
+    assignments = validate(parse_assignments(
+        chat([{"role": "user", "content": prompt}], model=BASELINE_MODEL)), patients, slots)
+    if not assignments:  # re-prompt once on malformed/empty output
+        strict = prompt + "\nYour previous reply was not valid JSON. Reply with ONLY the JSON list."
+        assignments = validate(parse_assignments(
+            chat([{"role": "user", "content": strict}], model=BASELINE_MODEL)), patients, slots)
+    return assignments
+
+
 def run(seed=7):
     patients, clinicians, slots = _load("patients"), _load("clinicians"), _load("slots")
-    if is_offline():
-        assignments = _greedy(patients, slots)
-    else:
-        prompt = build_prompt(patients, clinicians, slots)
-        assignments = validate(parse_assignments(
-            chat([{"role": "user", "content": prompt}], model=BASELINE_MODEL)), patients, slots)
-        if not assignments:  # re-prompt once on malformed/empty output
-            strict = prompt + "\nYour previous reply was not valid JSON. Reply with ONLY the JSON list."
-            assignments = validate(parse_assignments(
-                chat([{"role": "user", "content": strict}], model=BASELINE_MODEL)), patients, slots)
-    out = DATA / "assignments_baseline.json"
-    out.write_text(json.dumps(assignments, indent=2))
+    assignments = plan(patients, clinicians, slots)
+    (DATA / "assignments_baseline.json").write_text(json.dumps(assignments, indent=2))
     print(f"baseline -> {len(assignments)} assignments")
     return assignments
 

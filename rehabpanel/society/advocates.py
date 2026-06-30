@@ -84,6 +84,21 @@ def _open_slots(ctx, draft):
     return [s for s in ctx["slots"] if s["slot_id"] not in used]
 
 
+# Scorer's default weights — used to scale advocate severity so the Rules view is
+# causal: a weight near 0 drops that objective below SEVERITY_EXIT (the referee
+# ignores it), a raised weight makes it outrank others. With no weights passed,
+# severities are unchanged (default behaviour).
+_DEFAULT_W = {"acuity": 10.0, "overdue": 1.0, "continuity": 4.0, "pref": 2.0}
+
+
+def _scale(ctx, key, base):
+    w = ctx.get("weights") or {}
+    if key not in w:
+        return base
+    d = _DEFAULT_W.get(key) or w[key]
+    return max(0, min(10, round(base * (w[key] / d)) if d else base))
+
+
 # ---- deterministic critique per objective ----------------------------------
 
 def _crit_priority(draft, ctx):
@@ -92,7 +107,7 @@ def _crit_priority(draft, ctx):
     for p in ctx["patients"]:
         if p["acuity_score"] >= ACUITY_HIGH and p["patient_id"] not in assigned:
             out.append({"patient_id": p["patient_id"], "slot_id": None,
-                        "severity": min(10, p["acuity_score"]),
+                        "severity": _scale(ctx, "acuity", min(10, p["acuity_score"])),
                         "reason": f"acuity {p['acuity_score']}, unscheduled"})
     return out
 
@@ -105,7 +120,7 @@ def _crit_window(draft, ctx):
         od = _overdue_days(p, t0)
         if od > 0 and p["patient_id"] not in assigned:
             out.append({"patient_id": p["patient_id"], "slot_id": None,
-                        "severity": min(10, max(1, od)),
+                        "severity": _scale(ctx, "overdue", min(10, max(1, od))),
                         "reason": f"{od} days overdue, unscheduled"})
     return out
 
@@ -120,7 +135,7 @@ def _crit_continuity(draft, ctx):
             continue
         if slot["clinician_id"] != p["primary_clinician_id"]:
             out.append({"patient_id": p["patient_id"], "slot_id": a["slot_id"],
-                        "severity": 5,
+                        "severity": _scale(ctx, "continuity", 5),
                         "reason": f"primary {p['primary_clinician_id']}, assigned {slot['clinician_id']}"})
     return out
 
@@ -135,7 +150,7 @@ def _crit_preference(draft, ctx):
             continue
         if slot["mode"] != p["preferred_mode"]:
             out.append({"patient_id": p["patient_id"], "slot_id": a["slot_id"],
-                        "severity": 3,
+                        "severity": _scale(ctx, "pref", 3),
                         "reason": f"prefers {p['preferred_mode']}, booked {slot['mode']}"})
     return out
 

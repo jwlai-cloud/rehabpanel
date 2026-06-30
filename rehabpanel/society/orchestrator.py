@@ -46,6 +46,8 @@ class SocietyState(TypedDict):
     clinicians: list
     slots: list
     meta: dict
+    weights: dict          # priority weights — causal on advocate severities
+    seed_draft: list       # warm start: repair this plan instead of drafting cold
     draft: list
     objections: list
     ledger: Annotated[list, operator.add]      # rulings accumulate across rounds
@@ -98,18 +100,34 @@ def _apply_move(draft, move, slots_by_id, rnd):
 # ---- nodes -----------------------------------------------------------------
 
 def node_draft(state: SocietyState) -> dict:
-    """Capacity emits feasible skeleton; Priority fills by acuity (first pass)."""
-    ranked = sorted(state["patients"], key=lambda p: -p["acuity_score"])
-    open_slots = list(state["slots"])
-    draft = []
-    for p in ranked:
-        if not open_slots:
-            break
-        s = open_slots.pop(0)
-        draft.append({"patient_id": p["patient_id"], "slot_id": s["slot_id"],
-                      "assigned_in_round": 0, "rationale": "draft: acuity-first"})
+    """Start the plan. WARM: if a seed_draft is given (re-plan after an incident),
+    carry over every still-valid assignment and let critique/arbitrate repair only
+    what broke — minimal disruption. COLD: Capacity emits a feasible skeleton,
+    Priority fills by acuity. Orphaned carry-overs (slot gone) simply drop and
+    become unscheduled, which the advocates then object to (the incident's damage,
+    made visible)."""
+    seed = state.get("seed_draft") or []
+    S = {s["slot_id"]: s for s in state["slots"]}
+    P = {p["patient_id"] for p in state["patients"]}
+    draft, used_s, used_p = [], set(), set()
+    if seed:
+        for a in seed:
+            sid, pid = a.get("slot_id"), a.get("patient_id")
+            if sid in S and pid in P and sid not in used_s and pid not in used_p:
+                used_s.add(sid); used_p.add(pid)
+                draft.append({"patient_id": pid, "slot_id": sid,
+                              "assigned_in_round": 0, "rationale": "carried over"})
+    else:
+        for p in sorted(state["patients"], key=lambda p: -p["acuity_score"]):
+            free = next((s for s in state["slots"] if s["slot_id"] not in used_s), None)
+            if not free:
+                break
+            used_s.add(free["slot_id"])
+            draft.append({"patient_id": p["patient_id"], "slot_id": free["slot_id"],
+                          "assigned_in_round": 0, "rationale": "draft: acuity-first"})
     return {"draft": draft, "round": 0, "ledger": [], "stalled": False,
-            "snapshots": [{"round": 0, "draft": [dict(a) for a in draft], "rulings": []}]}
+            "snapshots": [{"round": 0, "draft": [dict(a) for a in draft],
+                           "rulings": [], "objections": []}]}
 
 
 def node_critique(state: SocietyState) -> dict:
@@ -117,6 +135,7 @@ def node_critique(state: SocietyState) -> dict:
     advocates = build_all()
     ctx = {k: state[k] for k in ("patients", "clinicians", "slots")}
     ctx["meta"] = state.get("meta")
+    ctx["weights"] = state.get("weights") or {}
     objections = []
     for name, adv in advocates.items():
         try:
@@ -183,7 +202,7 @@ def node_arbitrate(state: SocietyState) -> dict:
             continue
         return {"round": rnd, "draft": new_draft, "ledger": [line], "stalled": False,
                 "snapshots": [{"round": rnd, "draft": [dict(a) for a in new_draft],
-                               "rulings": [line]}]}
+                               "rulings": [line], "objections": state["objections"]}]}
     return {"round": rnd, "stalled": True}  # nothing actionable -> exit
 
 
@@ -211,14 +230,25 @@ def build_graph():
     return g.compile()
 
 
-def run(seed=7):
+def negotiate(tables, seed_draft=None, weights=None):
+    """In-memory negotiation: takes the world tables (+ optional warm-start draft
+    and priority weights), returns the final graph state (draft, ledger,
+    snapshots, round...). No file IO — the API and CLI both call this. The scorer
+    stays external; score snapshots afterwards."""
     init: SocietyState = {
-        "patients": _load("patients"), "clinicians": _load("clinicians"),
-        "slots": _load("slots"), "meta": _load("meta"),
+        "patients": tables["patients"], "clinicians": tables["clinicians"],
+        "slots": tables["slots"], "meta": tables.get("meta", {}),
+        "weights": weights or {}, "seed_draft": seed_draft or [],
         "draft": [], "objections": [], "ledger": [], "snapshots": [],
         "round": 0, "stalled": False,
     }
-    final = build_graph().invoke(init)
+    return build_graph().invoke(init)
+
+
+def run(seed=7):
+    tables = {n: _load(n) for n in ("patients", "clinicians", "slots")}
+    tables["meta"] = _load("meta")
+    final = negotiate(tables)
     (DATA / "assignments_society.json").write_text(json.dumps(final["draft"], indent=2))
     (DATA / "conflict_ledger.json").write_text(json.dumps(final["ledger"], indent=2))
     (DATA / "society_rounds.json").write_text(json.dumps(final["snapshots"], indent=2))
