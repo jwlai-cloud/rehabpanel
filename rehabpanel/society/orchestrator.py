@@ -15,16 +15,18 @@ Graph:
                          |________________|  no  -> END
 """
 import argparse, json
+from datetime import date
 from pathlib import Path
 from typing import TypedDict, Annotated
 import operator
 
 from langgraph.graph import StateGraph, START, END
 
-from .advocates import build_all
-from ..qwen_client import chat, REFEREE_MODEL
+from .advocates import build_all, parse_json_obj
+from ..qwen_client import chat, is_offline, REFEREE_MODEL
 
 DATA = Path(__file__).resolve().parent.parent.parent / "data"
+PROMPTS = Path(__file__).resolve().parent / "prompts"
 ROUND_CAP = 6
 SEVERITY_EXIT = 4
 
@@ -33,14 +35,53 @@ class SocietyState(TypedDict):
     patients: list
     clinicians: list
     slots: list
+    meta: dict
     draft: list
     objections: list
     ledger: Annotated[list, operator.add]   # rulings accumulate across rounds
     round: int
+    stalled: bool
 
 
 def _load(n):
     return json.loads((DATA / f"{n}.json").read_text())
+
+
+def _slot_label(slot):
+    """'Tue 10:00' — human-readable for the conflict ledger."""
+    wd = date.fromisoformat(slot["date"]).strftime("%a")
+    return f"{wd} {slot.get('start_time', '')}".strip()
+
+
+def _apply_move(draft, move, slots_by_id, rnd):
+    """Apply a referee-approved {patient_id, slot_id} move, keeping the plan
+    feasible (no double-book): swap slots if the target is occupied, displace if
+    the mover was unscheduled, else just move. Returns (new_draft, changed)."""
+    pid, sid = move.get("patient_id"), move.get("slot_id")
+    if sid not in slots_by_id or pid is None:
+        return draft, False
+    new = [dict(a) for a in draft]
+    occupant = next((a for a in new if a["slot_id"] == sid), None)
+    mover = next((a for a in new if a["patient_id"] == pid), None)
+    if occupant is mover and mover is not None:
+        return draft, False  # already there
+    if mover and occupant:                      # swap the two patients' slots
+        occupant["slot_id"], mover["slot_id"] = mover["slot_id"], sid
+        for a in (occupant, mover):
+            a["assigned_in_round"] = rnd
+        mover["rationale"] = "referee: swap"
+    elif mover and not occupant:                # target free — just move
+        mover["slot_id"] = sid
+        mover["assigned_in_round"] = rnd
+        mover["rationale"] = "referee: move"
+    elif occupant and not mover:                # mover unscheduled — displace
+        new = [a for a in new if a is not occupant]
+        new.append({"patient_id": pid, "slot_id": sid,
+                    "assigned_in_round": rnd, "rationale": "referee: seat"})
+    else:                                       # both free
+        new.append({"patient_id": pid, "slot_id": sid,
+                    "assigned_in_round": rnd, "rationale": "referee: seat"})
+    return new, True
 
 
 # ---- nodes -----------------------------------------------------------------
@@ -56,47 +97,99 @@ def node_draft(state: SocietyState) -> dict:
         s = open_slots.pop(0)
         draft.append({"patient_id": p["patient_id"], "slot_id": s["slot_id"],
                       "assigned_in_round": 0, "rationale": "draft: acuity-first"})
-    return {"draft": draft, "round": 0, "ledger": []}
+    return {"draft": draft, "round": 0, "ledger": [], "stalled": False}
 
 
 def node_critique(state: SocietyState) -> dict:
     """Each advocate files objections (1-10 severity) against the current draft."""
     advocates = build_all()
     ctx = {k: state[k] for k in ("patients", "clinicians", "slots")}
+    ctx["meta"] = state.get("meta")
     objections = []
     for name, adv in advocates.items():
         try:
             objections += [{**o, "by": name} for o in adv.critique(state["draft"], ctx)]
-        except NotImplementedError:
-            pass  # TODO(claude-code): remove once advocates are implemented
+        except Exception:
+            pass  # an advocate must never crash the negotiation
     return {"objections": objections}
 
 
-def node_arbitrate(state: SocietyState) -> dict:
-    """Referee resolves the highest-severity objection and logs the ruling.
+def _referee_rule(top, swap, slot_label):
+    """Build the apply-dict + one human-readable ledger line for a resolved
+    objection. Offline = template; online = let qwen3.7-max phrase the rationale."""
+    move = swap["move"]
+    if is_offline():
+        line = (f"{slot_label} — {top.get('by')}({top.get('patient_id')}, sev "
+                f"{top.get('severity')}): {top.get('reason')}. Ruling: {swap.get('reason')} "
+                f"(marginal value {swap.get('marginal_value')}).")
+        return move, line
+    try:
+        msg = [{"role": "system", "content": (PROMPTS / "referee.md").read_text()},
+               {"role": "user", "content": "Resolve this objection. Return ONLY JSON "
+                '{"apply":{"<patient_id>":"<slot_id>"},"ledger_entry":"..."}.\n'
+                + json.dumps({"objection": top, "proposed_swap": swap})}]
+        ruling = parse_json_obj(chat(msg, model=REFEREE_MODEL))
+        apply = ruling.get("apply") or {}
+        if apply:
+            pid, sid = next(iter(apply.items()))
+            move = {"patient_id": pid, "slot_id": sid}
+        return move, ruling.get("ledger_entry") or f"{slot_label} — resolved {top.get('patient_id')}."
+    except Exception:
+        line = f"{slot_label} — {top.get('by')}({top.get('patient_id')}): {swap.get('reason')}."
+        return move, line
 
-    TODO(claude-code): replace the no-op below with a referee LLM call
-    (prompts/referee.md) that:
-      1. requests swap proposals (with marginal values) for hot objections,
-      2. rules using global weights + marginal values,
-      3. applies the winning swap to `draft`,
-      4. returns a one-line ledger entry.
-    The round counter + ROUND_CAP guarantee termination meanwhile.
-    """
+
+def node_arbitrate(state: SocietyState) -> dict:
+    """Referee resolves hot objections (severity >= SEVERITY_EXIT) in severity
+    order: request a swap from the relevant advocate, rule on global weights +
+    marginal value, apply it feasibly, and log one ledger line per ruling.
+
+    Offline, it applies every mutually-compatible swap this round (the referee's
+    apply-dict is multi-entry by design) so the negotiation converges within
+    ROUND_CAP. Online it resolves the single top objection per round to bound the
+    token budget. Either way: no two swaps touch the same slot in one round, and
+    if nothing is actionable the round is marked stalled so the loop exits."""
+    advocates = build_all()
+    S = {s["slot_id"]: s for s in state["slots"]}
+    rnd = state["round"] + 1
+    limit = 1 if not is_offline() else None  # online: one ruling/round (budget)
     hot = sorted((o for o in state["objections"] if o.get("severity", 0) >= SEVERITY_EXIT),
-                 key=lambda o: -o["severity"])
-    ledger_entry = []
-    if hot:
-        top = hot[0]
-        # referee_msg = [{"role": "system", "content": (PROMPTS/"referee.md").read_text()}, ...]
-        # ruling = parse(chat(referee_msg, model=REFEREE_MODEL))
-        # apply ruling to draft ...
-        ledger_entry = [f"round {state['round']+1}: {top.get('by')} objection on "
-                        f"{top.get('patient_id')} (sev {top.get('severity')}) — TODO resolve"]
-    return {"round": state["round"] + 1, "ledger": ledger_entry}
+                 key=lambda o: -o.get("severity", 0))
+    working, touched, lines = state["draft"], set(), []
+    for top in hot:
+        if limit is not None and len(lines) >= limit:
+            break
+        adv = advocates.get(top.get("by"))
+        if not adv:
+            continue
+        try:
+            swap = adv.propose_swap(top, {**state, "draft": working})
+        except Exception:
+            swap = None
+        if not swap or not swap.get("move"):
+            continue
+        move = swap["move"]
+        old_sid = next((a["slot_id"] for a in working if a["patient_id"] == move.get("patient_id")), None)
+        if move.get("slot_id") in touched or (old_sid and old_sid in touched):
+            continue  # keep this round's swaps independent
+        label = _slot_label(S.get(move.get("slot_id"), {"date": state["meta"]["t0"]}))
+        move, line = _referee_rule(top, swap, label)
+        new_draft, changed = _apply_move(working, move, S, rnd)
+        if not changed:
+            continue
+        working = new_draft
+        touched.add(move.get("slot_id"))
+        if old_sid:
+            touched.add(old_sid)
+        lines.append(line)
+    if lines:
+        return {"round": rnd, "draft": working, "ledger": lines, "stalled": False}
+    return {"round": rnd, "stalled": True}  # nothing actionable -> exit
 
 
 def should_continue(state: SocietyState) -> str:
+    if state.get("stalled"):
+        return "end"
     hot = [o for o in state["objections"] if o.get("severity", 0) >= SEVERITY_EXIT]
     if hot and state["round"] < ROUND_CAP:
         return "arbitrate"
@@ -121,7 +214,8 @@ def build_graph():
 def run(seed=7):
     init: SocietyState = {
         "patients": _load("patients"), "clinicians": _load("clinicians"),
-        "slots": _load("slots"), "draft": [], "objections": [], "ledger": [], "round": 0,
+        "slots": _load("slots"), "meta": _load("meta"),
+        "draft": [], "objections": [], "ledger": [], "round": 0, "stalled": False,
     }
     final = build_graph().invoke(init)
     (DATA / "assignments_society.json").write_text(json.dumps(final["draft"], indent=2))

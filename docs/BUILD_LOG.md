@@ -20,4 +20,33 @@ changed, why, how verified. Pairs with `spec_negotiation.md`.
   one contract, so CI/tests/judges reproduce the gap key-free without burning
   the $40 voucher. Scorer stays external/pure-Python (guardrail #3 intact).
 
+### Negotiation core: advocates + referee (steps 1–3, 5)
+- `qwen_client.is_offline()` — picks LLM vs deterministic path.
+- `advocates.py` — `critique()` + `propose_swap()` for all 5 advocates, both
+  paths; defensive JSON parse (`parse_json_list/obj`). Offline swaps are
+  provably non-regressing (continuity → open/primary or non-worsening mutual
+  swap; preference → same-clinician preferred-mode open slot; seat → open slots
+  only, no zero-sum displacement).
+- `orchestrator.node_arbitrate` — referee resolves hot objections, applies
+  feasible swaps (`_apply_move`), logs one readable ledger line each
+  (`'Tue 10:00 — ...'`). Offline batches compatible swaps/round; online resolves
+  the top one/round (budget). Stall flag + ROUND_CAP guarantee termination.
+- `baseline.py` — offline acuity-first greedy fallback; online parse hardened
+  (validate ids, drop dupes, one re-prompt).
+
+**GO/NO-GO (offline, seeds 7/13/42) — society beats baseline, all feasible:**
+
+| ratio | mean gap |
+|------:|---------:|
+| 0.8 | 49.3 |
+| 1.0 | 73.0 |
+| 1.2 | 79.0 |
+| 1.3 | 82.3 |
+| 1.5 | 78.7 |
+
+Gap widens through the conflict-onset region (0.8→1.3), plateaus at 1.5 as the
+society hits its swap/round ceiling. Society's win comes from continuity (e.g.
+30→13 breaks) + same-clinician preference fixes, holding acuity coverage at
+24/24. Locked as `tests/test_negotiation.py`. Suite: 13 passed.
+
 <!-- next entries appended below as steps land -->
