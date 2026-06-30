@@ -73,3 +73,14 @@ def test_society_stays_feasible_at_high_scarcity():
     for seed in SEEDS:
         _, s, _ = _run_pair(seed, 1.5)
         assert s["feasible"]
+
+
+def test_negotiation_terminates():
+    """Termination contract: the loop never exceeds ROUND_CAP and ends either
+    stalled or with no remaining hot objections (the two safeguards)."""
+    for seed in SEEDS:
+        _, _, final = _run_pair(seed, 1.5)
+        assert final["round"] <= orchestrator.round_cap()
+        hot = [o for o in final.get("objections", [])
+               if o.get("severity", 0) >= orchestrator.SEVERITY_EXIT]
+        assert final.get("stalled") or not hot

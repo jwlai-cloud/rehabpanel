@@ -57,4 +57,23 @@ society hits its swap/round ceiling. Society's win comes from continuity (e.g.
 - 5 seeds × 5 ratios = 25 runs, all feasible, min gap +33 (society wins every
   single run): 0.8→46, 1.0→64, 1.2→65, 1.4→72, 1.6→66.
 
-<!-- next entries appended below as steps land -->
+### PR #2 review fixes (bots: gemini, sourcery)
+- **[HIGH] crash guard** — `node_arbitrate` validated `move` is a dict + pid/sid
+  exist before the referee call; advocate `propose_swap` rejects non-dict `move`
+  at source. A malformed LLM move can no longer raise `AttributeError`.
+- **[MED]** swap now updates *both* patients' rationale (`referee: swap`), not
+  just the mover's — accurate tracking in the schedule + UI.
+- benchmark `chart()` excludes infeasible runs (logs the count) so the curve
+  reflects only constraint-satisfying plans.
+- tests: termination contract (`round <= round_cap()`, stalled-or-no-hot) +
+  `propose_swap` malformed/non-dict/transport-error coverage. Suite 13 → 17.
+
+### Scrub-the-negotiation UI + one-conflict-per-round
+- Orchestrator now resolves ONE objection per round (faithful to the design's
+  play-by-play ledger) and emits a per-round `snapshots` list →
+  `data/society_rounds.json`. `round_cap()`: offline runs to convergence (~free),
+  online stays capped at 6 (voucher).
+- `ui_export` builds a per-round timeline (score + cells + cumulative ledger).
+- `ui/index.html`: scrubber (◀ ▶ Play slider) animates the negotiation — value
+  climbs −141→−70 round by round, moved cards glow, ledger fills, scoreboard
+  tracks the live round. Seed 7 @ 1.3 → 10 rounds.

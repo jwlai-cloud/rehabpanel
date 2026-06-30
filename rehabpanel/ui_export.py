@@ -58,6 +58,26 @@ def build():
     base = _load_opt("assignments_baseline", [])
     soc = _load_opt("assignments_society", [])
     ledger = _load_opt("conflict_ledger", [])
+    snapshots = _load_opt("society_rounds", [])
+
+    SCORE_KEYS = ("value", "acuity_coverage", "overdue_days", "continuity_breaks",
+                  "preference_mismatches", "patients_scheduled", "feasible")
+
+    def _slim(sc):
+        return {k: sc[k] for k in SCORE_KEYS}
+
+    # per-round timeline for the scrub UI: each round carries the plan state,
+    # its score, and the ledger accumulated up to that round.
+    rounds, cum = [], []
+    for snap in snapshots:
+        cum = cum + snap["rulings"]
+        rounds.append({
+            "round": snap["round"],
+            "score": _slim(score(snap["draft"], patients, clinicians, slots, meta=meta)),
+            "cells": _cells(snap["draft"], P, S, C),
+            "ledger": list(cum),
+            "moved": sum(1 for c in _cells(snap["draft"], P, S, C) if c["round"] == snap["round"]),
+        })
 
     state = {
         "meta": meta,
@@ -70,6 +90,7 @@ def build():
         "society_cells": _cells(soc, P, S, C),
         "baseline_cells": _cells(base, P, S, C),
         "ledger": ledger,
+        "rounds": rounds,
         "counts": {"patients": len(patients), "slots": len(slots),
                    "scheduled_society": len(soc), "scheduled_baseline": len(base)},
     }

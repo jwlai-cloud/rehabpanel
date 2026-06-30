@@ -23,14 +23,24 @@
   .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
   .panel h2{margin:0 0 12px;font-size:13px;text-transform:uppercase;
     letter-spacing:.08em;color:var(--muted);font-weight:600}
+  /* scrubber */
+  .scrub{display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+  .scrub button{background:var(--chip);color:var(--ink);border:1px solid var(--line);
+    border-radius:7px;padding:6px 12px;font-size:13px;cursor:pointer}
+  .scrub button:hover{border-color:var(--teal)}
+  .scrub button.play{background:var(--teal);border-color:var(--teal);color:#04231d;font-weight:700;min-width:78px}
+  .scrub input[type=range]{flex:1;min-width:160px;accent-color:var(--teal2)}
+  .scrub .status{font-size:13px;color:var(--muted);white-space:nowrap}
+  .scrub .status b{color:var(--teal2)}
   /* calendar */
   .cal{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
   .day{background:#111c27;border:1px solid var(--line);border-radius:9px;padding:8px;min-height:80px}
   .day h3{margin:0 0 8px;font-size:12px;color:var(--muted);text-align:center;
     border-bottom:1px solid var(--line);padding-bottom:6px}
   .card{background:var(--chip);border-left:3px solid var(--good);border-radius:6px;
-    padding:6px 8px;margin-bottom:7px;font-size:12px;position:relative}
+    padding:6px 8px;margin-bottom:7px;font-size:12px;position:relative;transition:box-shadow .2s}
   .card.break{border-left-color:var(--amber)}
+  .card.moved{box-shadow:0 0 0 2px var(--teal2);background:#1c3330}
   .card .nm{font-weight:600}
   .card .meta{color:var(--muted);font-size:11px;margin-top:2px;display:flex;
     gap:6px;flex-wrap:wrap;align-items:center}
@@ -44,6 +54,7 @@
   .ledger{max-height:360px;overflow:auto;font-size:13px}
   .ledger li{list-style:none;padding:9px 11px;border:1px solid var(--line);
     border-radius:7px;margin-bottom:8px;background:#111c27;border-left:3px solid var(--teal)}
+  .ledger li.fresh{border-left-color:var(--teal2);background:#13241f}
   .ledger .empty{color:var(--muted)}
   /* scoreboard */
   table{width:100%;border-collapse:collapse;font-size:13px}
@@ -65,12 +76,19 @@
 </header>
 <main>
   <section class="panel">
-    <h2>Weekly calendar — negotiated society plan</h2>
+    <h2>Weekly calendar — watch the society negotiate</h2>
+    <div class="scrub">
+      <button id="prev" title="previous round">◀</button>
+      <button id="play" class="play">▶ Play</button>
+      <button id="next" title="next round">▶</button>
+      <input type="range" id="slider" min="0" max="0" value="0" step="1">
+      <span class="status" id="status"></span>
+    </div>
     <div class="cal" id="cal"></div>
     <div class="legend">
       <span><span class="sw" style="background:#1f7a5e"></span>seen by primary clinician</span>
       <span><span class="sw" style="background:#e0a83d"></span>continuity break</span>
-      <span><span class="pin">↔ r#</span> moved by referee in round #</span>
+      <span><span class="sw" style="background:#2bd4b0"></span>moved this round</span>
       <span><span class="warn">⚠ mode</span> preference mismatch</span>
     </div>
   </section>
@@ -80,7 +98,7 @@
       <ul class="ledger" id="ledger"></ul>
     </section>
     <section class="panel">
-      <h2>Scoreboard — society vs baseline</h2>
+      <h2>Scoreboard — society (this round) vs baseline</h2>
       <table id="score"></table>
       <div class="gap" id="gap"></div>
     </section>
@@ -89,47 +107,94 @@
 <script>
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+let ST, ROUNDS, cur = 0, timer = null;
 
-fetch('state.json').then(r => r.json()).then(render).catch(e => {
+fetch('state.json').then(r => r.json()).then(init).catch(e => {
   $('#scenario').textContent = 'Could not load state.json — run `make data && make baseline && make society && make ui` first.';
   console.error(e);
 });
 
-function render(st){
+function init(st){
+  ST = st;
   const m = st.meta || {};
   $('#scenario').textContent =
     `${st.counts.patients} patients · ${st.counts.slots} slots · demand/capacity ${m.ratio} · week of ${m.t0}`;
   $('#mode').textContent = st.scores.society.feasible ? 'plan feasible ✓' : 'INFEASIBLE ✗';
 
-  // calendar
-  const cal = $('#cal');
-  st.days.forEach(d => {
+  // fall back to a single "round" if snapshots are absent
+  ROUNDS = (st.rounds && st.rounds.length) ? st.rounds : [{
+    round: 0, score: st.scores.society, cells: st.society_cells, ledger: st.ledger, moved: 0
+  }];
+  const last = ROUNDS.length - 1;
+  const sl = $('#slider'); sl.max = last; sl.value = last; cur = last;
+  sl.addEventListener('input', () => { stop(); setRound(+sl.value); });
+  $('#prev').onclick = () => { stop(); setRound(Math.max(0, cur - 1)); };
+  $('#next').onclick = () => { stop(); setRound(Math.min(last, cur + 1)); };
+  $('#play').onclick = play;
+  setRound(last);
+}
+
+function play(){
+  if(timer){ stop(); return; }
+  if(cur >= ROUNDS.length - 1) setRound(0);   // restart from the draft
+  $('#play').textContent = '⏸ Pause';
+  timer = setInterval(() => {
+    if(cur >= ROUNDS.length - 1){ stop(); return; }
+    setRound(cur + 1);
+  }, 1100);
+}
+function stop(){ if(timer){ clearInterval(timer); timer = null; } $('#play').textContent = '▶ Play'; }
+
+function setRound(i){
+  cur = i; $('#slider').value = i;
+  const R = ROUNDS[i];
+  const isDraft = R.round === 0;
+  $('#status').innerHTML =
+    `Round <b>${R.round}</b> / ${ROUNDS[ROUNDS.length-1].round} · value <b>${R.score.value}</b>` +
+    (isDraft ? ' · acuity-first draft (= baseline)' : ` · ${R.moved} patient(s) moved`);
+  renderCal(R, isDraft);
+  renderLedger(R);
+  renderScore(R);
+}
+
+function renderCal(R, isDraft){
+  const cal = $('#cal'); cal.innerHTML = '';
+  ST.days.forEach(d => {
     const col = document.createElement('div'); col.className = 'day';
     col.innerHTML = `<h3>${d}</h3>`;
-    st.society_cells.filter(c => c.day === d).forEach(c => {
+    R.cells.filter(c => c.day === d).forEach(c => {
+      const fresh = !isDraft && c.round === R.round;
       const card = document.createElement('div');
-      card.className = 'card' + (c.continuity_ok ? '' : ' break');
+      card.className = 'card' + (c.continuity_ok ? '' : ' break') + (fresh ? ' moved' : '');
       const acuCls = c.acuity >= 7 ? 'acu' : 'acu lo';
       card.innerHTML =
         `<div class="nm">${esc(c.patient)} <span class="${acuCls}">A${c.acuity}</span></div>` +
         `<div class="meta"><span>${c.time}</span><span>${esc(c.clinician)}</span>` +
         `<span>${c.mode}</span>` +
-        (c.round > 0 ? `<span class="pin">↔ r${c.round}</span>` : '') +
+        (fresh ? '<span class="pin">↔ moved</span>' : '') +
         (c.pref_ok ? '' : '<span class="warn">⚠ mode</span>') + `</div>`;
       col.appendChild(card);
     });
     cal.appendChild(col);
   });
+}
 
-  // ledger
-  const led = $('#ledger');
-  if(!st.ledger.length){ led.innerHTML = '<li class="empty">No rulings — try a scarcer ratio (RATIO≥1.2).</li>'; }
-  st.ledger.forEach(line => {
-    const li = document.createElement('li'); li.textContent = line; led.appendChild(li);
+function renderLedger(R){
+  const led = $('#ledger'); led.innerHTML = '';
+  if(!R.ledger.length){
+    led.innerHTML = '<li class="empty">No rulings yet — press ▶ Play to negotiate.</li>'; return;
+  }
+  const freshSet = new Set(ROUNDS[cur].ledger.slice(cur > 0 ? ROUNDS[cur-1].ledger.length : 0));
+  R.ledger.forEach(line => {
+    const li = document.createElement('li');
+    if(freshSet.has(line)) li.className = 'fresh';
+    li.textContent = line; led.appendChild(li);
   });
+  led.scrollTop = led.scrollHeight;
+}
 
-  // scoreboard
-  const b = st.scores.baseline, s = st.scores.society;
+function renderScore(R){
+  const b = ST.scores.baseline, s = R.score;
   const rows = [
     ['Value (higher better)', b.value, s.value, 'max'],
     ['Acuity coverage', b.acuity_coverage, s.acuity_coverage, 'max'],
@@ -145,8 +210,7 @@ function render(st){
     if(dir === 'min' && sv !== bv){ (sv < bv ? sw='win' : bw='win'); }
     html += `<tr><td>${name}</td><td class="${bw}">${bv}</td><td class="${sw}">${sv}</td></tr>`;
   }
-  html += '</tbody>';
-  $('#score').innerHTML = html;
+  $('#score').innerHTML = html + '</tbody>';
   $('#gap').innerHTML = `Negotiation advantage: <b>${(s.value - b.value).toFixed(1)}</b> value points`;
 }
 </script>
