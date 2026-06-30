@@ -32,5 +32,5 @@ Where each submission artifact lives and how to regenerate it.
 
 | Artifact | Link | Note |
 |---|---|---|
-| Interactive scrub demo (static) | https://claude.ai/code/artifact/c2508301-7480-4451-a792-ac9513f768d6 | **pre-redesign** single-page UI; the new coordinator app needs a hosted backend (see `docs/deploy.md`) — it can't be a static page |
+| Coordinator app (static snapshot) | https://claude.ai/code/artifact/c2508301-7480-4451-a792-ac9513f768d6 | the new 5-view app with **baked incident→replan states** (interactive, no backend); full live interactivity via `make serve` / `docs/deploy.md` |
 | Public repo | https://github.com/jwlai-cloud/rehabpanel | MIT |

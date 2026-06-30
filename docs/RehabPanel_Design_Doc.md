@@ -190,3 +190,31 @@ The single most persuasive figure: sweep `demand_capacity_ratio` from 0.8 → 1.
 | Negotiation loops / non-termination | Hard round cap + objection-severity threshold to exit |
 | "It's just an ensemble" critique | Advocates argue from *distinct objectives* with marginal-value trades, not majority vote |
 | Eligibility (proprietary data / novelty) | Synthetic-only data; fresh build; explicit "what's new" paragraph |
+
+---
+
+## 9. Evolution — the coordinator app (post-MVP)
+
+The batch pipeline above (baseline vs society + benchmark) stays the reproducible
+core. On top of it we built a **coordinator app** so the society is *operated*,
+not just measured. Full spec: `docs/spec_coordinator_app.md`; architecture:
+`docs/architecture_app.svg`.
+
+- **Framing.** The agent society **assists a nurse coordinator**: the coordinator
+  sets roster, caseload and the priority rule; the society negotiates and shows
+  its work; the coordinator reviews the conflict ledger and approves.
+- **Incident-driven re-planning.** A nurse calls in sick, a patient cancels, or
+  an urgent referral arrives → the live score drops → **Re-plan** runs a *warm*
+  negotiation that repairs only what broke.
+- **Two measurable gains.** (1) Initial-plan value vs the single-agent baseline —
+  the headline, widening with scarcity. (2) After a disruption, **minimal
+  disruption**: the society warm-repairs changing few appointments where a cold
+  single agent would churn the whole week. Disruption is a diff reported *outside*
+  the locked scorer (we don't claim a raw-value win on re-plan).
+- **Causal priority weights.** The Rules view changes both the score and the
+  agents' priorities — offline, advocate severities scale by weight; online, the
+  weights go into the prompts.
+- **Stack.** FastAPI backend over an in-memory session behind a `Store` interface
+  (a DB slots in later); a 5-view SPA (Caseload · Team · Rules ·
+  Schedule/Negotiation · KPIs). Deploy: `docs/deploy.md`.
+- **Scorer unchanged** — still pure-Python, external, and CI-locked.

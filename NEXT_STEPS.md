@@ -1,8 +1,13 @@
 # NEXT_STEPS — RehabPanel handoff
 
-Current, prioritized plan. Reflects the repo *as it stands now* (post-LangGraph
-refactor + lazy-client fix). For design rationale see `docs/RehabPanel_Design_Doc.md`;
+Current, prioritized plan. For design rationale see `docs/RehabPanel_Design_Doc.md`;
 for guardrails see `CLAUDE.md`.
+
+> **STATUS — shipped.** Every critical-path step below is DONE, plus a full
+> **coordinator-app redesign**: FastAPI backend + 5-view SPA + incident-driven
+> warm re-planning + causal rule weights + a ~3-min demo video + Docker/Alibaba
+> deploy. Current source of truth: `docs/spec_coordinator_app.md` and
+> `docs/BUILD_LOG.md`. The plan below is kept for history.
 
 ## Where the repo is right now
 
