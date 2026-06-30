@@ -1,4 +1,4 @@
-.PHONY: data baseline society benchmark demo test
+.PHONY: data baseline society benchmark ui demo test
 SEED ?= 7
 RATIO ?= 1.3
 
@@ -17,5 +17,8 @@ benchmark:   ## baseline vs society across seeds + scarcity sweep
 test:        ## lock the objective function
 	pytest -q
 
-demo:        ## launch the 3-panel demo UI
+ui:          ## bundle the latest run into ui/state.json for the demo
+	python -m rehabpanel.ui_export
+
+demo: ui     ## build ui state, then launch the 3-panel demo UI (http://localhost:8000)
 	python -m http.server --directory ui 8000

@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RehabPanel — Negotiated Schedule</title>
+<style>
+  :root{
+    --bg:#0f1720; --panel:#16212e; --ink:#e7eef5; --muted:#8aa0b3;
+    --line:#243446; --teal:#179e86; --teal2:#2bd4b0;
+    --amber:#e0a83d; --red:#e2614c; --good:#1f7a5e; --chip:#1d2b3a;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  header{padding:18px 22px;border-bottom:1px solid var(--line);
+    display:flex;align-items:baseline;gap:16px;flex-wrap:wrap}
+  header h1{font-size:19px;margin:0;letter-spacing:.2px}
+  header .sub{color:var(--muted);font-size:13px}
+  .mode{margin-left:auto;font-size:12px;color:var(--muted);
+    border:1px solid var(--line);padding:3px 9px;border-radius:999px}
+  main{padding:18px 22px;display:flex;flex-direction:column;gap:18px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+  .panel h2{margin:0 0 12px;font-size:13px;text-transform:uppercase;
+    letter-spacing:.08em;color:var(--muted);font-weight:600}
+  /* calendar */
+  .cal{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
+  .day{background:#111c27;border:1px solid var(--line);border-radius:9px;padding:8px;min-height:80px}
+  .day h3{margin:0 0 8px;font-size:12px;color:var(--muted);text-align:center;
+    border-bottom:1px solid var(--line);padding-bottom:6px}
+  .card{background:var(--chip);border-left:3px solid var(--good);border-radius:6px;
+    padding:6px 8px;margin-bottom:7px;font-size:12px;position:relative}
+  .card.break{border-left-color:var(--amber)}
+  .card .nm{font-weight:600}
+  .card .meta{color:var(--muted);font-size:11px;margin-top:2px;display:flex;
+    gap:6px;flex-wrap:wrap;align-items:center}
+  .acu{background:var(--red);color:#fff;border-radius:4px;padding:0 5px;font-size:10px;font-weight:700}
+  .acu.lo{background:#3b5165}
+  .pin{color:var(--teal2);font-size:10px}
+  .warn{color:var(--amber);font-size:10px}
+  .row2{display:grid;grid-template-columns:1.2fr 1fr;gap:18px}
+  @media(max-width:840px){.cal{grid-template-columns:repeat(2,1fr)}.row2{grid-template-columns:1fr}}
+  /* ledger */
+  .ledger{max-height:360px;overflow:auto;font-size:13px}
+  .ledger li{list-style:none;padding:9px 11px;border:1px solid var(--line);
+    border-radius:7px;margin-bottom:8px;background:#111c27;border-left:3px solid var(--teal)}
+  .ledger .empty{color:var(--muted)}
+  /* scoreboard */
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{padding:8px 6px;text-align:right;border-bottom:1px solid var(--line)}
+  th:first-child,td:first-child{text-align:left;color:var(--muted)}
+  thead th{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.06em}
+  .win{color:var(--teal2);font-weight:700}
+  .gap{margin-top:12px;font-size:13px;color:var(--muted)}
+  .gap b{color:var(--teal2);font-size:18px}
+  .legend{color:var(--muted);font-size:11px;margin-top:10px;display:flex;gap:14px;flex-wrap:wrap}
+  .sw{display:inline-block;width:10px;height:10px;border-radius:2px;vertical-align:middle;margin-right:4px}
+</style>
+</head>
+<body>
+<header>
+  <h1>RehabPanel</h1>
+  <span class="sub" id="scenario">loading…</span>
+  <span class="mode" id="mode"></span>
+</header>
+<main>
+  <section class="panel">
+    <h2>Weekly calendar — negotiated society plan</h2>
+    <div class="cal" id="cal"></div>
+    <div class="legend">
+      <span><span class="sw" style="background:#1f7a5e"></span>seen by primary clinician</span>
+      <span><span class="sw" style="background:#e0a83d"></span>continuity break</span>
+      <span><span class="pin">↔ r#</span> moved by referee in round #</span>
+      <span><span class="warn">⚠ mode</span> preference mismatch</span>
+    </div>
+  </section>
+  <div class="row2">
+    <section class="panel">
+      <h2>Conflict ledger — referee rulings</h2>
+      <ul class="ledger" id="ledger"></ul>
+    </section>
+    <section class="panel">
+      <h2>Scoreboard — society vs baseline</h2>
+      <table id="score"></table>
+      <div class="gap" id="gap"></div>
+    </section>
+  </div>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+
+fetch('state.json').then(r => r.json()).then(render).catch(e => {
+  $('#scenario').textContent = 'Could not load state.json — run `make data && make baseline && make society && make ui` first.';
+  console.error(e);
+});
+
+function render(st){
+  const m = st.meta || {};
+  $('#scenario').textContent =
+    `${st.counts.patients} patients · ${st.counts.slots} slots · demand/capacity ${m.ratio} · week of ${m.t0}`;
+  $('#mode').textContent = st.scores.society.feasible ? 'plan feasible ✓' : 'INFEASIBLE ✗';
+
+  // calendar
+  const cal = $('#cal');
+  st.days.forEach(d => {
+    const col = document.createElement('div'); col.className = 'day';
+    col.innerHTML = `<h3>${d}</h3>`;
+    st.society_cells.filter(c => c.day === d).forEach(c => {
+      const card = document.createElement('div');
+      card.className = 'card' + (c.continuity_ok ? '' : ' break');
+      const acuCls = c.acuity >= 7 ? 'acu' : 'acu lo';
+      card.innerHTML =
+        `<div class="nm">${esc(c.patient)} <span class="${acuCls}">A${c.acuity}</span></div>` +
+        `<div class="meta"><span>${c.time}</span><span>${esc(c.clinician)}</span>` +
+        `<span>${c.mode}</span>` +
+        (c.round > 0 ? `<span class="pin">↔ r${c.round}</span>` : '') +
+        (c.pref_ok ? '' : '<span class="warn">⚠ mode</span>') + `</div>`;
+      col.appendChild(card);
+    });
+    cal.appendChild(col);
+  });
+
+  // ledger
+  const led = $('#ledger');
+  if(!st.ledger.length){ led.innerHTML = '<li class="empty">No rulings — try a scarcer ratio (RATIO≥1.2).</li>'; }
+  st.ledger.forEach(line => {
+    const li = document.createElement('li'); li.textContent = line; led.appendChild(li);
+  });
+
+  // scoreboard
+  const b = st.scores.baseline, s = st.scores.society;
+  const rows = [
+    ['Value (higher better)', b.value, s.value, 'max'],
+    ['Acuity coverage', b.acuity_coverage, s.acuity_coverage, 'max'],
+    ['Overdue days', b.overdue_days, s.overdue_days, 'min'],
+    ['Continuity breaks', b.continuity_breaks, s.continuity_breaks, 'min'],
+    ['Preference mismatches', b.preference_mismatches, s.preference_mismatches, 'min'],
+    ['Patients scheduled', b.patients_scheduled, s.patients_scheduled, ''],
+  ];
+  let html = '<thead><tr><th>Objective</th><th>Baseline</th><th>Society</th></tr></thead><tbody>';
+  for(const [name, bv, sv, dir] of rows){
+    let bw = '', sw = '';
+    if(dir === 'max' && sv !== bv){ (sv > bv ? sw='win' : bw='win'); }
+    if(dir === 'min' && sv !== bv){ (sv < bv ? sw='win' : bw='win'); }
+    html += `<tr><td>${name}</td><td class="${bw}">${bv}</td><td class="${sw}">${sv}</td></tr>`;
+  }
+  html += '</tbody>';
+  $('#score').innerHTML = html;
+  $('#gap').innerHTML = `Negotiation advantage: <b>${(s.value - b.value).toFixed(1)}</b> value points`;
+}
+</script>
+</body>
+</html>
