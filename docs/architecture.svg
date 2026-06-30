@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 660" font-family="-apple-system, Segoe UI, Roboto, sans-serif">
+  <rect width="980" height="660" fill="#ffffff"/>
+  <text x="490" y="34" text-anchor="middle" font-size="22" font-weight="700" fill="#1a1a2e">RehabPanel — Agent Society Architecture</text>
+  <text x="490" y="54" text-anchor="middle" font-size="13" fill="#6b7280">Track 3 · same seeded data + same deterministic scorer for both pipelines</text>
+
+  <!-- arrowhead -->
+  <defs>
+    <marker id="ah" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L7,3 L0,6 Z" fill="#475569"/>
+    </marker>
+    <marker id="ahd" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L7,3 L0,6 Z" fill="#9333ea"/>
+    </marker>
+  </defs>
+
+  <!-- DATA LAYER -->
+  <rect x="40" y="80" width="260" height="150" rx="10" fill="#f0f9ff" stroke="#0284c7" stroke-width="1.5"/>
+  <text x="170" y="104" text-anchor="middle" font-size="13" font-weight="700" fill="#0369a1">DATA LAYER · synthetic, public</text>
+  <rect x="60" y="116" width="220" height="42" rx="6" fill="#ffffff" stroke="#7dd3fc"/>
+  <text x="170" y="133" text-anchor="middle" font-size="12" font-weight="600" fill="#0c4a6e">Synthetic Generator</text>
+  <text x="170" y="149" text-anchor="middle" font-size="10.5" fill="#64748b">seeded · demand_capacity_ratio knob</text>
+  <rect x="60" y="170" width="220" height="44" rx="6" fill="#ffffff" stroke="#7dd3fc"/>
+  <text x="170" y="187" text-anchor="middle" font-size="11.5" fill="#0c4a6e">patients · clinicians · slots</text>
+  <text x="170" y="203" text-anchor="middle" font-size="11.5" fill="#0c4a6e">· encounters (JSON)</text>
+
+  <!-- BASELINE -->
+  <rect x="360" y="80" width="250" height="92" rx="10" fill="#fef2f2" stroke="#dc2626" stroke-width="1.5"/>
+  <text x="485" y="104" text-anchor="middle" font-size="13" font-weight="700" fill="#b91c1c">BASELINE PIPELINE</text>
+  <rect x="380" y="116" width="210" height="42" rx="6" fill="#ffffff" stroke="#fca5a5"/>
+  <text x="485" y="133" text-anchor="middle" font-size="12" font-weight="600" fill="#7f1d1d">Single Qwen Agent</text>
+  <text x="485" y="149" text-anchor="middle" font-size="10.5" fill="#64748b">one pass · collapses trade-off</text>
+
+  <!-- SOCIETY -->
+  <rect x="360" y="196" width="250" height="248" rx="10" fill="#faf5ff" stroke="#9333ea" stroke-width="1.5"/>
+  <text x="485" y="220" text-anchor="middle" font-size="13" font-weight="700" fill="#7e22ce">SOCIETY PIPELINE</text>
+  <rect x="380" y="232" width="210" height="40" rx="6" fill="#ffffff" stroke="#d8b4fe"/>
+  <text x="485" y="249" text-anchor="middle" font-size="12" font-weight="600" fill="#581c87">Charge-Nurse Referee</text>
+  <text x="485" y="263" text-anchor="middle" font-size="10" fill="#64748b">orchestrator · larger Qwen tier</text>
+
+  <text x="485" y="290" text-anchor="middle" font-size="10.5" font-weight="600" fill="#7e22ce">Advocate agents · small Qwen tier</text>
+  <rect x="378" y="298" width="100" height="28" rx="5" fill="#f3e8ff" stroke="#c084fc"/>
+  <text x="428" y="316" text-anchor="middle" font-size="10.5" fill="#581c87">Clinical Priority</text>
+  <rect x="492" y="298" width="100" height="28" rx="5" fill="#f3e8ff" stroke="#c084fc"/>
+  <text x="542" y="316" text-anchor="middle" font-size="10.5" fill="#581c87">Follow-up</text>
+  <rect x="378" y="332" width="100" height="28" rx="5" fill="#f3e8ff" stroke="#c084fc"/>
+  <text x="428" y="350" text-anchor="middle" font-size="10.5" fill="#581c87">Continuity</text>
+  <rect x="492" y="332" width="100" height="28" rx="5" fill="#f3e8ff" stroke="#c084fc"/>
+  <text x="542" y="350" text-anchor="middle" font-size="10.5" fill="#581c87">Preference</text>
+  <rect x="378" y="366" width="214" height="28" rx="5" fill="#ede9fe" stroke="#a78bfa"/>
+  <text x="485" y="384" text-anchor="middle" font-size="10.5" fill="#581c87">Capacity — hard constraint (veto)</text>
+  <text x="485" y="414" text-anchor="middle" font-size="10" fill="#6b7280">Draft → Critique → Negotiate → Arbitrate</text>
+  <text x="485" y="430" text-anchor="middle" font-size="10" fill="#6b7280">→ schedule + conflict ledger</text>
+
+  <!-- QWEN CLOUD -->
+  <rect x="670" y="196" width="270" height="92" rx="10" fill="#fffbeb" stroke="#d97706" stroke-width="1.5"/>
+  <text x="805" y="226" text-anchor="middle" font-size="13" font-weight="700" fill="#b45309">Qwen Cloud</text>
+  <text x="805" y="248" text-anchor="middle" font-size="11" fill="#92400e">dashscope-intl.aliyuncs.com</text>
+  <text x="805" y="266" text-anchor="middle" font-size="10.5" fill="#a16207">OpenAI-compatible · Alibaba Cloud</text>
+  <text x="805" y="280" text-anchor="middle" font-size="9.5" fill="#a16207">(deployment-proof artifact)</text>
+
+  <!-- SCORER -->
+  <rect x="360" y="476" width="250" height="68" rx="10" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.5"/>
+  <text x="485" y="502" text-anchor="middle" font-size="13" font-weight="700" fill="#15803d">Deterministic Scorer</text>
+  <text x="485" y="522" text-anchor="middle" font-size="10.5" fill="#166534">pure Python · shared objective fn</text>
+  <text x="485" y="536" text-anchor="middle" font-size="10" fill="#65a30d">NO LLM — reproducible</text>
+
+  <!-- BENCHMARK -->
+  <rect x="670" y="476" width="270" height="68" rx="10" fill="#f8fafc" stroke="#475569" stroke-width="1.5"/>
+  <text x="805" y="502" text-anchor="middle" font-size="13" font-weight="700" fill="#334155">Benchmark Runner</text>
+  <text x="805" y="522" text-anchor="middle" font-size="10.5" fill="#475569">N seeds · scarcity sweep</text>
+  <text x="805" y="536" text-anchor="middle" font-size="10" fill="#64748b">→ gap widens with scarcity</text>
+
+  <!-- DEMO UI -->
+  <rect x="40" y="476" width="260" height="68" rx="10" fill="#f8fafc" stroke="#475569" stroke-width="1.5"/>
+  <text x="170" y="502" text-anchor="middle" font-size="13" font-weight="700" fill="#334155">Demo UI · 3 panels</text>
+  <text x="170" y="522" text-anchor="middle" font-size="10.5" fill="#475569">calendar · conflict ledger</text>
+  <text x="170" y="536" text-anchor="middle" font-size="10.5" fill="#475569">· society-vs-baseline scoreboard</text>
+
+  <!-- EDGES -->
+  <line x1="300" y1="138" x2="358" y2="130" stroke="#475569" stroke-width="1.5" marker-end="url(#ah)"/>
+  <line x1="300" y1="180" x2="358" y2="290" stroke="#475569" stroke-width="1.5" marker-end="url(#ah)"/>
+  <line x1="485" y1="172" x2="485" y2="194" stroke="#475569" stroke-width="1.5" marker-end="url(#ah)"/>
+  <line x1="592" y1="252" x2="668" y2="240" stroke="#9333ea" stroke-width="1.3" stroke-dasharray="4 3" marker-end="url(#ahd)"/>
+  <line x1="592" y1="138" x2="700" y2="194" stroke="#9333ea" stroke-width="1.3" stroke-dasharray="4 3" marker-end="url(#ahd)"/>
+  <text x="640" y="186" font-size="9.5" fill="#9333ea">LLM calls</text>
+  <line x1="485" y1="444" x2="485" y2="474" stroke="#475569" stroke-width="1.5" marker-end="url(#ah)"/>
+  <line x1="485" y1="172" x2="430" y2="474" stroke="#475569" stroke-width="1" stroke-dasharray="3 3" marker-end="url(#ah)"/>
+  <line x1="610" y1="510" x2="668" y2="510" stroke="#475569" stroke-width="1.5" marker-end="url(#ah)"/>
+  <line x1="360" y1="510" x2="302" y2="510" stroke="#475569" stroke-width="1.5" marker-end="url(#ah)"/>
+  <line x1="430" y1="444" x2="220" y2="474" stroke="#475569" stroke-width="1" stroke-dasharray="3 3" marker-end="url(#ah)"/>
+</svg>

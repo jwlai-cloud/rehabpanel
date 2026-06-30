@@ -1,0 +1,6 @@
+openai>=1.30
+faker>=25.0
+pydantic>=2.7
+matplotlib>=3.8
+pytest>=8.0
+langgraph>=0.2
