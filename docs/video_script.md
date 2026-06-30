@@ -1,8 +1,11 @@
 # RehabPanel — demo video script
 
-~90s, 8 scenes. Narration = AI voice (macOS `say`, voice Samantha). Subtitles
-burned in. Visuals = the clinical scrub UI (seed 7, ratio 1.3) + `results/gap.png`.
-Rendered by `scripts/make_video.sh` → `results/demo.mp4`.
+~90s, 8 scenes. Narration = neural **Alibaba DashScope CosyVoice** when
+`DASHSCOPE_API_KEY` is set (`pip install dashscope`) — keeping voice on Qwen
+Cloud — else falls back to macOS `say` (voice Samantha). Subtitles burned in.
+Visuals = the clinical scrub UI (seed 7, ratio 1.3) + `results/gap.png`.
+Rendered by `scripts/make_video.sh` (`make video`) → `results/demo.mp4`.
+Tune voice with `TTS_VOICE` / `TTS_MODEL`.
 
 | # | Visual | Narration (= subtitle) |
 |---|--------|------------------------|
