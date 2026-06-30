@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RehabPanel — Negotiated Schedule</title>
+<style>
+  :root{
+    --paper:#eef3f7; --panel:#ffffff; --ink:#0f2942; --muted:#5a7287;
+    --line:#dde6ee; --line2:#e9eff5; --col:#f5f8fb;
+    --teal:#0b6e63; --teal-d:#085a51; --teal-soft:#e6f3f0;
+    --red:#cc4b3e; --amber:#c28a14; --green:#2f8f6e; --slate:#51657a;
+    --shadow:0 1px 2px rgba(15,41,66,.06), 0 4px 14px rgba(15,41,66,.05);
+    --r:12px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);
+    font:14px/1.5 "Segoe UI",-apple-system,BlinkMacSystemFont,Roboto,"Helvetica Neue",Arial,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  .num{font-variant-numeric:tabular-nums}
+  header{background:var(--panel);border-bottom:1px solid var(--line);
+    border-top:3px solid var(--teal);padding:16px 24px;
+    display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header svg{flex:0 0 auto}
+  header h1{font-size:19px;margin:0;font-weight:700;letter-spacing:-.01em}
+  header .sub{color:var(--muted);font-size:13px}
+  .pill{margin-left:auto;font-size:12px;font-weight:600;padding:4px 12px;border-radius:999px;
+    background:var(--teal-soft);color:var(--teal-d)}
+  .pill.bad{background:#fbe9e7;color:#a3392f}
+  main{padding:20px 24px;display:flex;flex-direction:column;gap:18px;max-width:1500px;margin:0 auto}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;
+    padding:18px;box-shadow:var(--shadow)}
+  .panel h2{margin:0 0 14px;font-size:11px;text-transform:uppercase;
+    letter-spacing:.1em;color:var(--muted);font-weight:700}
+  /* scrubber */
+  .scrub{display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+  .scrub button{background:var(--panel);color:var(--ink);border:1px solid var(--line);
+    border-radius:9px;padding:7px 12px;font-size:14px;cursor:pointer;line-height:1}
+  .scrub button:hover{border-color:var(--teal);color:var(--teal)}
+  .scrub button:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
+  .scrub button.play{background:var(--teal);border-color:var(--teal);color:#fff;
+    font-weight:700;min-width:92px}
+  .scrub button.play:hover{background:var(--teal-d);color:#fff}
+  .scrub input[type=range]{flex:1;min-width:170px;accent-color:var(--teal)}
+  .scrub .status{font-size:13px;color:var(--muted);white-space:nowrap}
+  .scrub .status b{color:var(--ink)}
+  /* calendar */
+  .cal{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
+  .day{background:var(--col);border:1px solid var(--line2);border-radius:12px;padding:10px;min-height:90px}
+  .day h3{margin:0 0 10px;font-size:12px;font-weight:700;color:var(--ink);text-align:center;
+    padding-bottom:8px;border-bottom:1px solid var(--line)}
+  .card{background:var(--panel);border:1px solid var(--line2);border-left:4px solid var(--green);
+    border-radius:9px;padding:8px 10px;margin-bottom:8px;font-size:12px;
+    box-shadow:0 1px 1px rgba(15,41,66,.04);transition:box-shadow .2s,transform .2s}
+  .card.break{border-left-color:var(--amber)}
+  .card.moved{box-shadow:0 0 0 2px var(--teal);transform:translateY(-1px)}
+  .card .nm{font-weight:600;display:flex;align-items:center;gap:6px;justify-content:space-between}
+  .card .meta{color:var(--muted);font-size:11px;margin-top:3px;display:flex;
+    gap:7px;flex-wrap:wrap;align-items:center}
+  .clin{display:inline-flex;align-items:center;gap:4px}
+  .dot{width:7px;height:7px;border-radius:50%;display:inline-block}
+  .acu{color:#fff;border-radius:5px;padding:1px 6px;font-size:10px;font-weight:700;
+    background:var(--red);font-variant-numeric:tabular-nums}
+  .acu.lo{background:var(--slate)}
+  .pin{color:var(--teal);font-size:10px;font-weight:700}
+  .warn{color:var(--amber);font-size:10px;font-weight:600}
+  .row2{display:grid;grid-template-columns:1.2fr 1fr;gap:18px}
+  @media(max-width:880px){.cal{grid-template-columns:repeat(2,1fr)}.row2{grid-template-columns:1fr}}
+  /* legend */
+  .legend{color:var(--muted);font-size:11.5px;margin-top:12px;display:flex;gap:16px;flex-wrap:wrap}
+  .sw{display:inline-block;width:10px;height:10px;border-radius:3px;vertical-align:middle;margin-right:5px}
+  /* ledger */
+  .ledger{max-height:380px;overflow:auto;font-size:13px;padding-right:4px}
+  .ledger li{list-style:none;padding:10px 12px;border:1px solid var(--line2);
+    border-left:4px solid var(--teal);border-radius:9px;margin-bottom:9px;background:var(--panel)}
+  .ledger li.fresh{border-left-color:var(--teal);background:var(--teal-soft)}
+  .ledger .empty{color:var(--muted)}
+  /* scoreboard */
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{padding:9px 6px;text-align:right;border-bottom:1px solid var(--line2);font-variant-numeric:tabular-nums}
+  th:first-child,td:first-child{text-align:left;color:var(--muted);font-variant-numeric:normal}
+  thead th{color:var(--muted);font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:700}
+  .win{color:var(--teal);font-weight:700}
+  .gap{margin-top:14px;font-size:13px;color:var(--muted)}
+  .gap b{color:var(--teal);font-size:20px;font-variant-numeric:tabular-nums}
+  @media(prefers-reduced-motion:reduce){.card{transition:none}}
+</style>
+</head>
+<body>
+<header>
+  <svg width="26" height="26" viewBox="0 0 28 28" aria-hidden="true">
+    <rect x="1" y="1" width="26" height="26" rx="7" fill="#e6f3f0" stroke="#0b6e63" stroke-width="1.5"/>
+    <path d="M4 15 H9 L11 9 L15 19 L17 13 H24" fill="none" stroke="#0b6e63" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>
+  <h1>RehabPanel</h1>
+  <span class="sub" id="scenario">loading…</span>
+  <span class="pill" id="mode"></span>
+</header>
+<main>
+  <section class="panel">
+    <h2>Weekly panel — watch the care team negotiate</h2>
+    <div class="scrub">
+      <button id="prev" title="previous round" aria-label="previous round">◀</button>
+      <button id="play" class="play">▶ Play</button>
+      <button id="next" title="next round" aria-label="next round">▶</button>
+      <input type="range" id="slider" min="0" max="0" value="0" step="1" aria-label="negotiation round">
+      <span class="status num" id="status"></span>
+    </div>
+    <div class="cal" id="cal"></div>
+    <div class="legend">
+      <span><span class="sw" style="background:#2f8f6e"></span>seen by primary clinician</span>
+      <span><span class="sw" style="background:#c28a14"></span>continuity break</span>
+      <span><span class="sw" style="background:#0b6e63"></span>moved this round</span>
+      <span><span class="sw" style="background:#cc4b3e"></span>high acuity (≥7)</span>
+      <span><span class="warn">⚠ mode</span> preference mismatch</span>
+    </div>
+  </section>
+  <div class="row2">
+    <section class="panel">
+      <h2>Conflict ledger — referee rulings</h2>
+      <ul class="ledger" id="ledger"></ul>
+    </section>
+    <section class="panel">
+      <h2>Scoreboard — society (this round) vs baseline</h2>
+      <table id="score"></table>
+      <div class="gap" id="gap"></div>
+    </section>
+  </div>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const CLIN_COLORS = ['#0b6e63','#2563a8','#9a4fb0','#b06d12','#3a7d44','#a33b5e'];
+let ST, ROUNDS, CLINMAP = {}, cur = 0, timer = null;
+
+fetch('state.json').then(r => r.json()).then(init).catch(e => {
+  $('#scenario').textContent = 'Could not load state.json — run `make data && make baseline && make society && make ui` first.';
+  console.error(e);
+});
+
+function init(st){
+  ST = st;
+  (st.clinicians || []).forEach((c, i) => { CLINMAP[c.id] = CLIN_COLORS[i % CLIN_COLORS.length]; });
+  const m = st.meta || {};
+  $('#scenario').textContent =
+    `${st.counts.patients} patients · ${st.counts.slots} slots · demand/capacity ${m.ratio} · week of ${m.t0}`;
+  const feasible = st.scores.society.feasible;
+  $('#mode').textContent = feasible ? 'plan feasible ✓' : 'INFEASIBLE ✗';
+  $('#mode').className = 'pill' + (feasible ? '' : ' bad');
+
+  ROUNDS = (st.rounds && st.rounds.length) ? st.rounds : [{
+    round: 0, score: st.scores.society, cells: st.society_cells, ledger: st.ledger, moved: 0
+  }];
+  const last = ROUNDS.length - 1;
+  const sl = $('#slider'); sl.max = last; sl.value = last; cur = last;
+  sl.addEventListener('input', () => { stop(); setRound(+sl.value); });
+  $('#prev').onclick = () => { stop(); setRound(Math.max(0, cur - 1)); };
+  $('#next').onclick = () => { stop(); setRound(Math.min(last, cur + 1)); };
+  $('#play').onclick = play;
+  setRound(last);
+}
+
+function play(){
+  if(timer){ stop(); return; }
+  if(cur >= ROUNDS.length - 1) setRound(0);
+  $('#play').textContent = '⏸ Pause';
+  timer = setInterval(() => {
+    if(cur >= ROUNDS.length - 1){ stop(); return; }
+    setRound(cur + 1);
+  }, 1100);
+}
+function stop(){ if(timer){ clearInterval(timer); timer = null; } $('#play').textContent = '▶ Play'; }
+
+function setRound(i){
+  cur = i; $('#slider').value = i;
+  const R = ROUNDS[i];
+  const isDraft = R.round === 0;
+  $('#status').innerHTML =
+    `Round <b>${R.round}</b> / ${ROUNDS[ROUNDS.length-1].round} · value <b>${R.score.value}</b>` +
+    (isDraft ? ' · acuity-first draft (= baseline)' : ` · ${R.moved} patient(s) moved`);
+  renderCal(R, isDraft);
+  renderLedger(R);
+  renderScore(R);
+}
+
+function renderCal(R, isDraft){
+  const cal = $('#cal'); cal.innerHTML = '';
+  ST.days.forEach(d => {
+    const col = document.createElement('div'); col.className = 'day';
+    col.innerHTML = `<h3>${d}</h3>`;
+    R.cells.filter(c => c.day === d).forEach(c => {
+      const fresh = !isDraft && c.round === R.round;
+      const card = document.createElement('div');
+      card.className = 'card' + (c.continuity_ok ? '' : ' break') + (fresh ? ' moved' : '');
+      const acuCls = c.acuity >= 7 ? 'acu' : 'acu lo';
+      const dot = `<i class="dot" style="background:${CLINMAP[c.clinician_id] || '#5a7287'}"></i>`;
+      card.innerHTML =
+        `<div class="nm"><span>${esc(c.patient)}</span><span class="${acuCls}">A${c.acuity}</span></div>` +
+        `<div class="meta"><span class="num">${c.time}</span>` +
+        `<span class="clin">${dot}${esc(c.clinician)}</span><span>${c.mode}</span>` +
+        (fresh ? '<span class="pin">↔ moved</span>' : '') +
+        (c.pref_ok ? '' : '<span class="warn">⚠ mode</span>') + `</div>`;
+      col.appendChild(card);
+    });
+    cal.appendChild(col);
+  });
+}
+
+function renderLedger(R){
+  const led = $('#ledger'); led.innerHTML = '';
+  if(!R.ledger.length){
+    led.innerHTML = '<li class="empty">No rulings yet — press ▶ Play to negotiate.</li>'; return;
+  }
+  const freshStart = cur > 0 ? ROUNDS[cur-1].ledger.length : 0;
+  const freshSet = new Set(R.ledger.slice(freshStart));
+  R.ledger.forEach(line => {
+    const li = document.createElement('li');
+    if(freshSet.has(line)) li.className = 'fresh';
+    li.textContent = line; led.appendChild(li);
+  });
+  led.scrollTop = led.scrollHeight;
+}
+
+function renderScore(R){
+  const b = ST.scores.baseline, s = R.score;
+  const rows = [
+    ['Value (higher better)', b.value, s.value, 'max'],
+    ['Acuity coverage', b.acuity_coverage, s.acuity_coverage, 'max'],
+    ['Overdue days', b.overdue_days, s.overdue_days, 'min'],
+    ['Continuity breaks', b.continuity_breaks, s.continuity_breaks, 'min'],
+    ['Preference mismatches', b.preference_mismatches, s.preference_mismatches, 'min'],
+    ['Patients scheduled', b.patients_scheduled, s.patients_scheduled, ''],
+  ];
+  let html = '<thead><tr><th>Objective</th><th>Baseline</th><th>Society</th></tr></thead><tbody>';
+  for(const [name, bv, sv, dir] of rows){
+    let bw = '', sw = '';
+    if(dir === 'max' && sv !== bv){ (sv > bv ? sw='win' : bw='win'); }
+    if(dir === 'min' && sv !== bv){ (sv < bv ? sw='win' : bw='win'); }
+    html += `<tr><td>${name}</td><td class="${bw}">${bv}</td><td class="${sw}">${sv}</td></tr>`;
+  }
+  $('#score').innerHTML = html + '</tbody>';
+  $('#gap').innerHTML = `Negotiation advantage: <b>${(s.value - b.value).toFixed(1)}</b> value points`;
+}
+</script>
+</body>
+</html>

@@ -5,4 +5,5 @@ __pycache__/
 data/*.json
 results/*.json
 results/*.png
+ui/state.json
 !data/sample_seed/

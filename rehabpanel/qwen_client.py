@@ -20,6 +20,17 @@ def client() -> OpenAI:
         )
     return _CLIENT
 
+
+def is_offline() -> bool:
+    """True => run the deterministic reference negotiator instead of calling
+    Qwen. Lets CI, tests, and judges reproduce the benchmark gap key-free
+    (without burning the $40 voucher); the live demo runs with the key for real
+    agents. Force either way with REHABPANEL_OFFLINE=1 / =0."""
+    flag = os.environ.get("REHABPANEL_OFFLINE")
+    if flag is not None:
+        return flag == "1"
+    return not os.environ.get("DASHSCOPE_API_KEY")
+
 # Distinct capabilities under a Qwen-only constraint come from model TIER:
 # referee gets the larger model, advocates the cheap one (also caps token cost).
 # Current DashScope tier (verify exact strings against the Model Studio model
