@@ -43,6 +43,13 @@ stays capacity-feasible. Headline figure: `results/gap.png`. The gain comes from
 the society repairing continuity and preference that the single agent abandons,
 while holding high-acuity coverage constant.
 
+**Second gain — adaptivity under disruption.** After an incident (nurse sick,
+cancellation, urgent referral), the society **warm-repairs** the plan with
+**minimal disruption** — e.g. *4 of 39* appointments changed — while a cold
+single-agent re-draft would churn most of the week (you'd re-notify everyone).
+We report disruption honestly as its own metric (a diff outside the locked
+scorer); we do **not** claim a raw-value win on re-plan.
+
 ## How we built it
 
 - **Qwen Cloud only.** All agents call Qwen via `rehabpanel/qwen_client.py` →
@@ -66,6 +73,13 @@ while holding high-acuity coverage constant.
   live scoreboard — with a scrubber that replays the negotiation round by round.
 - **CI**: GitHub Actions runs `make test` on every push/PR; `main` is
   branch-protected on it so the objective function can't drift.
+- **Coordinator app** (`make serve`): a FastAPI backend over an in-memory
+  session + a 5-view SPA (Caseload · Team · Rules · Schedule/Negotiation · KPIs).
+  The society **assists a nurse coordinator**: set the roster/caseload/rule, then
+  when reality breaks (nurse sick · patient cancels · urgent referral) the live
+  score drops and **Re-plan** runs a *warm* negotiation that repairs only what
+  broke. Priority weights are causal on the negotiation. See
+  `docs/architecture_app.svg` and `docs/spec_coordinator_app.md`.
 
 ## What's next
 
@@ -108,14 +122,16 @@ make test           # locks the scorer
 
 ## 3-minute video script
 
-| Time | Shot | Narration |
-|------|------|-----------|
-| 0:00–0:20 | Problem: calendar full, patients overflowing | "A rehab nurse has 43 slots and 56 patients due. Acuity, overdue dates, continuity, and preference all fight for the same time. Something gives." |
-| 0:20–0:40 | Baseline scoreboard column | "A single agent collapses the trade-off — it fills by acuity and lets continuity rot. Baseline value: −141." |
-| 0:40–1:40 | **Scrub the negotiation** (press Play) | "Now the society. Five advocates object; the referee resolves one conflict per round. Watch Tuesday 10:00 — Continuity wants P0027 with their primary nurse; the referee swaps, logs it, value climbs." Let value tick −141 → −70. |
-| 1:40–2:10 | Conflict ledger close-up | "Every ruling is on the record — a single agent never shows this work." |
-| 2:10–2:40 | `gap.png` scarcity sweep | "Across 25 runs the society wins every time, and the advantage widens as slots get scarcer. The conflict is the point." |
-| 2:40–3:00 | qwen_client.py + repo | "All Qwen on Alibaba Cloud, deterministic scorer, one-command reproduce. Decision support, synthetic data. Thanks." |
+Driven by the **coordinator app** (`make serve`).
+
+| Time | View / action | Narration |
+|------|---------------|-----------|
+| 0:00–0:25 | **Caseload** + **Team** | "A coordinator has 56 patients due but 43 slots across three nurses. Acuity, overdue dates, continuity and preference all fight for the same time." |
+| 0:25–0:45 | **Rules** sliders | "This is the priority rule the society optimizes — and it's causal: drop continuity to zero and the agents stop protecting primary-nurse matches." |
+| 0:45–1:35 | **Schedule** → press **Play** | "Watch the society negotiate. Five advocates object, the charge-nurse referee resolves one conflict per round and logs it. Value climbs −141 → −70 — a +71 gain a single agent never finds." |
+| 1:35–2:20 | **Incident → Nurse sick → Re-plan** | "Reality breaks: a nurse calls in sick Tuesday. The score drops to −106, patients orphaned. Re-plan — the society warm-repairs, changing just 4 of 39 appointments; a single agent would re-shuffle the whole week." |
+| 2:20–2:45 | **KPIs** session timeline | "Every disruption dips, every re-plan recovers — with minimal disruption. That's the measurable efficiency." |
+| 2:45–3:00 | `gap.png` + `qwen_client.py` | "Across 25 runs the society wins every time, widening with scarcity. All Qwen on Alibaba Cloud, deterministic scorer, one-command reproduce. Decision support, synthetic data." |
 
 ## Submission checklist
 
