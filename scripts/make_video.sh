@@ -97,10 +97,16 @@ echo "== narrate + build scene clips =="
 SRT="$BD/demo.srt"; : > "$SRT"
 t0=0; idx=1
 ff () { awk -v s="$1" 'BEGIN{h=int(s/3600);m=int((s%3600)/60);sec=s-int(s/60)*60;printf "%02d:%02d:%06.3f",h,m,sec}' | sed 's/\./,/'; }
+VOICEMODE="say"
 for i in "${!IMGS[@]}"; do
   n=$((i+1))
-  say -v "$VOICE" -o "$BD/a$n.aiff" "${NARR[$i]}"
-  dur=$(ffprobe -v quiet -of csv=p=0 -show_entries format=duration "$BD/a$n.aiff")
+  # neural CosyVoice (Alibaba) if a key is present; else macOS say
+  if python scripts/tts.py "${NARR[$i]}" "$BD/a$n.mp3" >/dev/null 2>&1; then
+    AUD="$BD/a$n.mp3"; VOICEMODE="cosyvoice"
+  else
+    say -v "$VOICE" -o "$BD/a$n.aiff" "${NARR[$i]}"; AUD="$BD/a$n.aiff"
+  fi
+  dur=$(ffprobe -v quiet -of csv=p=0 -show_entries format=duration "$AUD")
   pad=0.8; len=$(awk -v d="$dur" -v p="$pad" 'BEGIN{print d+p}')
   # normalize each source image to 1280x720: calendar frames crop top, others fit+pad
   case "${IMGS[$i]}" in
@@ -108,7 +114,7 @@ for i in "${!IMGS[@]}"; do
     *gap.png) VF="scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=white" ;;
     *) VF="scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=0xeef3f7" ;;
   esac
-  ffmpeg -y -loop 1 -t "$len" -i "${IMGS[$i]}" -i "$BD/a$n.aiff" \
+  ffmpeg -y -loop 1 -t "$len" -i "${IMGS[$i]}" -i "$AUD" \
     -vf "$VF,fps=30,format=yuv420p" -c:v libx264 -pix_fmt yuv420p \
     -c:a aac -ar 44100 -af "apad" -t "$len" "$BD/scene$n.mp4" >/dev/null 2>&1
   echo "file 'scene$n.mp4'" >> "$BD/concat.txt"
@@ -125,4 +131,4 @@ ffmpeg -y -i "$BD/raw.mp4" -vf "subtitles=$BD/demo.srt:force_style='Fontname=Ari
   -c:v libx264 -pix_fmt yuv420p -c:a aac "$ROOT/results/demo.mp4" >/dev/null 2>&1
 
 dur=$(ffprobe -v quiet -of csv=p=0 -show_entries format=duration "$ROOT/results/demo.mp4")
-echo "== done: results/demo.mp4 (${dur}s) =="
+echo "== done: results/demo.mp4 (${dur}s) · voice: $VOICEMODE =="
