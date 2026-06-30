@@ -7,8 +7,7 @@ Respects qwen_client.is_offline(): deterministic without a key, live Qwen with.
 from pathlib import Path
 
 from fastapi import FastAPI
-from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel
 
 from .state_service import CoordinatorService, INCIDENTS
@@ -53,7 +52,12 @@ def rules(r: Rules):
     return svc.set_rules({k: v for k, v in r.model_dump().items() if v is not None})
 
 
-# serve the SPA (built in later phases) at / when present
-_UI = Path(__file__).resolve().parent.parent / "ui"
-if (_UI / "app.html").exists():
-    app.mount("/", StaticFiles(directory=_UI, html=True), name="ui")
+# serve the coordinator SPA at /
+_APP = Path(__file__).resolve().parent.parent / "ui" / "app.html"
+
+
+@app.get("/")
+def index():
+    if _APP.exists():
+        return FileResponse(_APP)
+    return JSONResponse({"ok": True, "hint": "API up. Build ui/app.html for the SPA."})
