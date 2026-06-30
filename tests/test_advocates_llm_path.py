@@ -55,3 +55,27 @@ def test_propose_swap_online_parses(monkeypatch):
     state = {**CTX, "draft": DRAFT}
     swap = A.Advocate("continuity").propose_swap({"patient_id": "P0", "slot_id": "S0"}, state)
     assert swap["move"] == {"patient_id": "P0", "slot_id": "S0"}
+
+
+def test_propose_swap_online_bad_output_returns_none(monkeypatch):
+    monkeypatch.setattr(A, "is_offline", lambda: False)
+    monkeypatch.setattr(A, "chat", lambda *a, **k: "no json here, just prose")
+    state = {**CTX, "draft": DRAFT}
+    assert A.Advocate("continuity").propose_swap({"patient_id": "P0", "slot_id": "S0"}, state) is None
+
+
+def test_propose_swap_online_non_dict_move_returns_none(monkeypatch):
+    # malformed: "move" present but not an object -> must not reach the orchestrator
+    monkeypatch.setattr(A, "is_offline", lambda: False)
+    monkeypatch.setattr(A, "chat", lambda *a, **k: '{"move": "S0", "marginal_value": 4}')
+    state = {**CTX, "draft": DRAFT}
+    assert A.Advocate("preference").propose_swap({"patient_id": "P0", "slot_id": "S0"}, state) is None
+
+
+def test_propose_swap_online_transport_error_returns_none(monkeypatch):
+    def boom(*a, **k):
+        raise RuntimeError("network down")
+    monkeypatch.setattr(A, "is_offline", lambda: False)
+    monkeypatch.setattr(A, "chat", boom)
+    state = {**CTX, "draft": DRAFT}
+    assert A.Advocate("window").propose_swap({"patient_id": "P0", "slot_id": "S0"}, state) is None

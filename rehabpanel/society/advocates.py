@@ -295,7 +295,7 @@ class Advocate:
                                '{"move":{"patient_id":..,"slot_id":..},"marginal_value":<num>,"reason":..}.\n'
                                + json.dumps(payload)}]
             obj = parse_json_obj(chat(msg, model=ADVOCATE_MODEL))
-            return obj if obj.get("move") else None
+            return obj if isinstance(obj.get("move"), dict) else None
         except Exception:
             return None
 

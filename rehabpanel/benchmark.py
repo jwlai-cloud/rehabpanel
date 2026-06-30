@@ -52,10 +52,18 @@ def run():
 
 
 def chart(rows, mode):
-    """Mean society-minus-baseline value gap vs scarcity, with min/max band."""
+    """Mean society-minus-baseline value gap vs scarcity, with min/max band.
+    Only feasible runs are charted — an infeasible plan's value is meaningless,
+    so including its gap would distort the curve."""
+    feasible = [r for r in rows if r.get("feasible")]
+    dropped = len(rows) - len(feasible)
+    if dropped:
+        print(f"  note: excluded {dropped} infeasible run(s) from the chart")
     by_ratio = {}
-    for r in rows:
+    for r in feasible:
         by_ratio.setdefault(r["ratio"], []).append(r["gap"])
+    if not by_ratio:
+        print("  WARNING: no feasible runs to chart"); return
     ratios = sorted(by_ratio)
     means = [mean(by_ratio[r]) for r in ratios]
     lows = [min(by_ratio[r]) for r in ratios]
