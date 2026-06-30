@@ -1,0 +1,27 @@
+name: CI
+
+# Locks the deterministic objective function: any push or PR that breaks the
+# scorer (tests/test_scorer.py) fails here. The scorer is pure Python and must
+# stay reproducible — see CLAUDE.md guardrail #3.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run tests
+        run: make test
