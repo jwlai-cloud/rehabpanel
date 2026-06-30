@@ -1,42 +1,54 @@
 flowchart TB
-    subgraph DATA["Data Layer — synthetic, public, no real records"]
-        GEN["Synthetic Patient Generator<br/>seeded · demand_capacity_ratio knob"]
-        TABLES["JSON tables<br/>patients · clinicians · slots · encounters"]
-        GEN --> TABLES
+    subgraph DATA["Data layer — synthetic, no real records"]
+        GEN["generator.py<br/>seeded · --ratio scarcity knob"]
+        TBL["patients · clinicians · slots<br/>encounters · meta (t0)"]
+        GEN --> TBL
     end
 
-    TABLES --> BASE
-    TABLES --> SOC
+    TBL --> B1
+    TBL --> DR
 
-    subgraph BASE["Baseline Pipeline"]
-        B1["Single Qwen Agent<br/>one-pass scheduler"]
-        B1 --> BOUT["assignments.json"]
+    subgraph BASE["Baseline — single agent"]
+        B1["baseline.py<br/>one Qwen pass · acuity-first greedy (offline)"]
+        B1 --> BOUT["assignments_baseline.json"]
     end
 
-    subgraph SOC["Society Pipeline"]
-        ORCH["Charge-Nurse Referee<br/>orchestrator · larger Qwen tier"]
-        subgraph ADV["Advocate Agents — small Qwen tier"]
-            A1["Clinical Priority"]
-            A2["Follow-up Window"]
-            A3["Continuity"]
-            A4["Capacity — hard constraint"]
-            A5["Patient Preference"]
-        end
-        ORCH <--> ADV
-        ORCH --> SOUT["assignments.json<br/>+ conflict_ledger.json"]
+    subgraph SOC["Society — LangGraph negotiation (orchestrator.py)"]
+        DR["node_draft<br/>acuity-first skeleton"]
+        CR["node_critique<br/>5 advocates file objections"]
+        CD{"should_continue<br/>hot objection &amp; round &lt; cap?"}
+        AR["node_arbitrate<br/>referee resolves ONE conflict<br/>+ one ledger line"]
+        EN(["END"])
+        DR --> CR
+        CR --> CD
+        CD -- yes --> AR
+        AR --> CR
+        CD -- "no · stalled / no hot" --> EN
     end
 
-    QWEN["Qwen Cloud<br/>dashscope-intl OpenAI-compatible endpoint"]
-    B1 -. LLM calls .-> QWEN
-    ORCH -. LLM calls .-> QWEN
-    ADV -. LLM calls .-> QWEN
+    subgraph ADV["Advocates — distinct by role + tool + tier · qwen3.6-flash"]
+        A1["Priority"]
+        A2["Window"]
+        A3["Continuity"]
+        A4["Capacity · veto"]
+        A5["Preference"]
+    end
+    CR -. consults .-> ADV
+    AR -. arbitrates .-> REF["Charge-Nurse Referee<br/>qwen3.7-max"]
+
+    EN --> SOUT["assignments_society.json<br/>conflict_ledger.json<br/>society_rounds.json"]
+
+    QWEN["Qwen Cloud · dashscope-intl (Alibaba Cloud)<br/>— or deterministic offline path (REHABPANEL_OFFLINE) —"]
+    B1 -. LLM .-> QWEN
+    ADV -. LLM .-> QWEN
+    REF -. LLM .-> QWEN
 
     BOUT --> SCORE
     SOUT --> SCORE
-    SCORE["Deterministic Scorer<br/>pure Python · shared objective function"]
-    SCORE --> BENCH["Benchmark Runner<br/>N seeds · scarcity sweep"]
-    BENCH --> RESULTS["metrics + charts"]
+    SCORE["scorer.py · pure Python, no LLM<br/>shared objective function · CI-locked"]
+    SCORE --> BENCH["benchmark.py · seeds × scarcity sweep"]
+    BENCH --> RES["results/gap.png + metrics.json"]
 
-    SOUT --> UI["Demo UI<br/>calendar · conflict ledger · scoreboard"]
+    SOUT --> UI["ui/ · calendar · conflict ledger · scoreboard<br/>scrub the rounds"]
     BOUT --> UI
     SCORE --> UI

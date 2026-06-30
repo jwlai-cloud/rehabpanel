@@ -33,16 +33,16 @@ make test        # scorer unit tests
 
 | demand / capacity | mean value gap (society − baseline) | feasible |
 |------:|------:|:--:|
-| 0.8 | +45 | ✓ |
-| 1.0 | +64 | ✓ |
-| 1.2 | +65 | ✓ |
-| 1.4 | +71 | ✓ |
-| 1.6 | +67 | ✓ |
+| 0.8 | +45.2 | ✓ |
+| 1.0 | +64.2 | ✓ |
+| 1.2 | +65.2 | ✓ |
+| 1.4 | +70.8 | ✓ |
+| 1.6 | +66.6 | ✓ |
 
 The society out-scores the single agent on **every run**, and the advantage
-**widens with scarcity** (`results/gap.png`). It wins by repairing continuity and
-preference that the single agent abandons, while holding high-acuity coverage
-constant.
+**grows through the conflict-onset region (0.8 → 1.4)** (`results/gap.png`). It
+wins by repairing continuity and preference that the single agent abandons, while
+holding high-acuity coverage constant.
 
 ## How it works
 See `docs/RehabPanel_Design_Doc.md` and the architecture diagram
