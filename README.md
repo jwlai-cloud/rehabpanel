@@ -58,6 +58,8 @@ repairs only what broke. Two measurable gains:
 
 FastAPI backend (`rehabpanel/api.py`) over an in-memory session; the SPA is
 `ui/app.html`. Runs key-free (deterministic) or on live Qwen with a key.
+Containerised: `make docker-build && make docker-run` — deploy to Alibaba Cloud
+per `docs/deploy.md`.
 
 ## How it works
 See `docs/RehabPanel_Design_Doc.md` and the architecture diagrams
@@ -71,6 +73,7 @@ is reproducible: `make benchmark` regenerates every number.
 - `docs/spec_negotiation.md` — negotiation engine spec
 - `docs/spec_coordinator_app.md` — coordinator-app redesign spec
 - `docs/SUBMISSION.md` — submission packet + video script
+- `docs/deploy.md` — container + Alibaba Cloud deploy
 - `docs/BUILD_LOG.md` — running build record
 
 ## Qwen Cloud
