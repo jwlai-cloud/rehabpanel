@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Render the RehabPanel demo video from the LIVE coordinator app: boots the
-# FastAPI backend, captures each view via headless Chrome, drives a sick->replan
-# incident through the API, narrates (Alibaba CosyVoice if a key is set, else
-# macOS `say`), burns subtitles, assembles with ffmpeg -> results/demo.mp4.
-# macOS only (say + Chrome). Deterministic (offline engine).
+# Render the RehabPanel demo video (~3 min) from the LIVE coordinator app, with
+# why/how narrative cards interleaved with live-app beats. Boots the FastAPI
+# backend, captures each view via headless Chrome, drives a sick->replan incident
+# through /api, narrates (Alibaba CosyVoice if a key is set, else macOS `say`),
+# burns subtitles, assembles with ffmpeg -> results/demo.mp4. macOS only.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 ROOT="$(pwd)"
@@ -17,7 +17,6 @@ export REHABPANEL_OFFLINE=1
 command -v ffmpeg >/dev/null || { echo "need ffmpeg"; exit 1; }
 command -v say   >/dev/null || { echo "need macOS say"; exit 1; }
 [ -x "$CHROME" ] || { echo "no Chrome at $CHROME"; exit 1; }
-
 [ -f "$ROOT/results/gap.png" ] || { echo "== gap.png missing -> benchmark =="; python -m rehabpanel.benchmark >/dev/null; }
 
 echo "== boot coordinator backend =="
@@ -29,65 +28,81 @@ shoot(){ "$CHROME" --headless=new --disable-gpu --hide-scrollbars --force-device
   --window-size=1300,820 --default-background-color=FFFFFFFF \
   --screenshot="$2" --virtual-time-budget=3500 "$1" >/dev/null 2>&1; }
 
-card(){ cat > "$BD/$1" <<HTML
-<!doctype html><html><head><meta charset="utf-8"><style>
+HEAD='<!doctype html><html><head><meta charset="utf-8"><style>
  html,body{margin:0;width:1280px;height:720px;overflow:hidden;background:#eef3f7;color:#0f2942;
-   font:400 28px/1.4 "Segoe UI",-apple-system,Arial,sans-serif}
- .wrap{height:720px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:18px;
+   font:400 28px/1.5 "Segoe UI",-apple-system,Arial,sans-serif}
+ .c{height:720px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:18px;
    text-align:center;border-top:8px solid #0b6e63}
- h1{font-size:60px;margin:0;font-weight:800}.accent{color:#0b6e63}.sub{font-size:30px;color:#5a7287;max-width:960px}
- .foot{position:absolute;bottom:34px;width:100%;text-align:center;color:#5a7287;font-size:20px}
-</style></head><body><div class="wrap">$2</div></body></html>
-HTML
-}
-card title.html '<svg width="92" height="92" viewBox="0 0 28 28"><rect x="1" y="1" width="26" height="26" rx="7" fill="#e6f3f0" stroke="#0b6e63" stroke-width="1.5"/><path d="M4 15 H9 L11 9 L15 19 L17 13 H24" fill="none" stroke="#0b6e63" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><h1>Rehab<span class="accent">Panel</span></h1><div class="sub">An AI <b>agent society</b> assisting a nurse coordinator</div><div class="foot">Qwen Cloud · Track 3 · synthetic data</div>'
-card closing.html '<h1 class="accent">Negotiate. Adapt. Explain.</h1><div class="sub">Five advocates + a referee, re-planning under disruption with minimal churn.<br>All Qwen, deployed on Alibaba Cloud · decision support on synthetic data.</div><div class="foot">github.com/jwlai-cloud/rehabpanel · MIT</div>'
+ .l{height:720px;display:flex;flex-direction:column;justify-content:center;gap:22px;padding:0 110px;border-top:8px solid #0b6e63}
+ h1{font-size:52px;margin:0;font-weight:800}.accent{color:#0b6e63}
+ .sub{font-size:30px;color:#5a7287;max-width:980px}
+ .body{font-size:29px;color:#1f3b56;max-width:1010px}.body ul{margin:0;padding-left:26px}.body li{margin:11px 0}.body b{color:#0f2942}
+ .foot{position:absolute;bottom:34px;left:0;width:100%;text-align:center;color:#5a7287;font-size:20px}
+</style></head><body>'
+ctr(){ printf '%s<div class="c">%s</div></body></html>' "$HEAD" "$2" > "$BD/$1"; }   # centered card
+lft(){ printf '%s<div class="l"><h1 class="accent">%s</h1><div class="body">%s</div></div></body></html>' "$HEAD" "$2" "$3" > "$BD/$1"; }  # heading + body
 
-echo "== capture initial-state frames =="
-shoot "file://$BD/title.html"            "$BD/01.png"
-shoot "$URL/#caseload"                    "$BD/02.png"
-shoot "$URL/#team"                        "$BD/03.png"
-shoot "$URL/#rules"                       "$BD/04.png"
-shoot "$URL/?r=0#schedule"                "$BD/05.png"
-shoot "$URL/?r=99#schedule"               "$BD/06.png"
-echo "== incident: nurse sick =="
-curl -sf -X POST "$URL/api/incident/sick" >/dev/null
-shoot "$URL/#kpis"                         "$BD/07.png"
-echo "== re-plan (warm) =="
-curl -sf -X POST "$URL/api/replan" >/dev/null
-shoot "$URL/?r=99#schedule"               "$BD/08.png"
-shoot "$URL/#kpis"                         "$BD/09.png"
-shoot "file://$BD/closing.html"           "$BD/11.png"
+ctr title.html '<svg width="92" height="92" viewBox="0 0 28 28"><rect x="1" y="1" width="26" height="26" rx="7" fill="#e6f3f0" stroke="#0b6e63" stroke-width="1.5"/><path d="M4 15 H9 L11 9 L15 19 L17 13 H24" fill="none" stroke="#0b6e63" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><h1>Rehab<span class="accent">Panel</span></h1><div class="sub">An AI <b>agent society</b> that helps a nurse coordinator plan the week</div><div class="foot">Qwen Cloud · Track 3: Agent Society · synthetic data</div>'
+lft problem.html 'The problem' '<ul><li>Each cycle a rehab nurse decides <b>who to follow up, when, and how</b> — under fixed clinician time.</li><li>Acuity, overdue dates, continuity, capacity and preference <b>compete for the same scarce slots</b>.</li><li>Demand usually exceeds capacity — and the call lives in <b>one persons head</b>.</li></ul>'
+lft why.html 'Why a society, not one agent' '<div>A single scheduling agent <b>collapses the trade-off</b> — it anchors on the most legible objective, acuity, fills greedily, and lets overdue patients and continuity quietly rot.<br><br>We make the conflict <b>explicit, and negotiated</b>.</div>'
+lft how.html 'How it works' '<ul><li><b>Five advocates</b>, each arguing one objective: priority · window · continuity · capacity · preference.</li><li>A <b>charge-nurse referee</b> resolves one conflict at a time and logs every ruling.</li><li>A <b>pure-Python scorer</b> (never an LLM) grades each plan — reproducible.</li></ul>'
+lft scope.html 'Honest scope' '<div><b>Decision support, not autonomous scheduling</b> — a human approves every plan.<br><br>All data is <b>fully synthetic</b>. No real patient records, ever.</div>'
+ctr closing.html '<h1 class="accent">Negotiate. Adapt. Explain.</h1><div class="sub">Five advocates and a referee, re-planning under disruption with minimal churn.</div><div class="foot">All Qwen · deployed on Alibaba Cloud · github.com/jwlai-cloud/rehabpanel</div>'
 
-IMGS=( "$BD/01.png" "$BD/02.png" "$BD/03.png" "$BD/04.png" "$BD/05.png" "$BD/06.png" \
-       "$BD/07.png" "$BD/08.png" "$BD/09.png" "$ROOT/results/gap.png" "$BD/11.png" )
-# crop top for app views (action lives up top); fit+pad for cards/gap
-CROP=( card app app app app app app app app gap card )
+echo "== capture frames =="
+shoot "file://$BD/title.html"   "$BD/01.png"
+shoot "file://$BD/problem.html" "$BD/02.png"
+shoot "file://$BD/why.html"     "$BD/03.png"
+shoot "$URL/#caseload"          "$BD/04.png"
+shoot "$URL/#team"              "$BD/05.png"
+shoot "file://$BD/how.html"     "$BD/06.png"
+shoot "$URL/#rules"             "$BD/07.png"
+shoot "$URL/?r=0#schedule"      "$BD/08.png"
+shoot "$URL/?r=99#schedule"     "$BD/09.png"
+echo "== incident: nurse sick =="; curl -sf -X POST "$URL/api/incident/sick" >/dev/null
+shoot "$URL/#kpis"              "$BD/10.png"
+echo "== re-plan (warm) =="; curl -sf -X POST "$URL/api/replan" >/dev/null
+shoot "$URL/?r=99#schedule"     "$BD/11.png"
+shoot "$URL/#kpis"              "$BD/12.png"
+shoot "file://$BD/scope.html"   "$BD/14.png"
+shoot "file://$BD/closing.html" "$BD/15.png"
+
+IMGS=( "$BD/01.png" "$BD/02.png" "$BD/03.png" "$BD/04.png" "$BD/05.png" "$BD/06.png" "$BD/07.png" \
+       "$BD/08.png" "$BD/09.png" "$BD/10.png" "$BD/11.png" "$BD/12.png" "$ROOT/results/gap.png" "$BD/14.png" "$BD/15.png" )
+CROP=( card card card app app card app app app app app app gap card card )
 NARR=(
-"RehabPanel — an AI agent society assisting a nurse coordinator."
-"A coordinator has 56 patients due but only 43 slots this week."
-"Across three nurses — acuity, overdue dates, continuity and preference all compete for the same time."
-"This is the priority rule the society optimizes. It's causal: drop continuity to zero and the agents stop protecting primary-nurse matches."
-"Watch them negotiate. The acuity-first draft scores minus 141 — no better than a single agent."
-"Five advocates object; the charge-nurse referee resolves one conflict per round and logs each. Value climbs to minus 70 — a 71 point gain."
-"Then reality breaks: a nurse calls in sick on Tuesday. The score drops to minus 106 and patients are orphaned."
-"Re-plan runs a warm negotiation that repairs only what the incident broke."
-"Just 4 of 39 appointments change, and the session timeline recovers. That is the measurable efficiency."
-"Across 25 seeded runs the society wins every time, and the advantage widens as slots get scarcer."
-"All Qwen, deployed on Alibaba Cloud. Decision support on fully synthetic data."
+"RehabPanel — an AI agent society that helps a rehab nurse coordinator plan the week. Built for Track 3 on Qwen Cloud."
+"Here is the problem. Every cycle a rehab nurse decides which patients to follow up, when, and how, under fixed clinician time. Acuity, overdue follow-ups, continuity of care and patient preference all compete for the same scarce slots. Demand usually exceeds capacity, and the call lives in one person's head."
+"Why agents? A single scheduling agent collapses the trade-off. It anchors on acuity, fills greedily, and lets overdue patients and continuity quietly rot. We wanted the conflict made explicit, and negotiated."
+"Take one real week: fifty-six patients due, only forty-three slots. Each patient carries an acuity score, an overdue date, a primary nurse, and a mode preference."
+"Across three nurses with fixed weekly capacity. The squeeze is real."
+"So instead of one agent, we run five. Each advocate argues for exactly one objective. A charge-nurse referee resolves one conflict at a time and logs every ruling. And a pure-Python scorer, never an LLM, grades each plan, so the numbers are reproducible."
+"The coordinator sets the priority rule, and it is causal: drop continuity to zero and the agents stop trading for primary-nurse matches."
+"The first pass fills by acuity and scores minus one forty-one, exactly what a single agent would do."
+"Then they negotiate. Advocates object, the referee rules and logs each decision. Value climbs to minus seventy, a seventy-one point gain a lone agent never finds."
+"But reality breaks. A nurse calls in sick on Tuesday; her slots vanish and patients are orphaned. The live score drops to minus one hundred six."
+"The coordinator hits re-plan. The society runs a warm negotiation, repairing only what the incident broke, not reshuffling the whole week."
+"Just four of thirty-nine appointments change, and the score recovers. Minimal disruption: patients keep their slots. That is the efficiency that matters in a clinic."
+"Across twenty-five seeded runs the society beats the single agent every time, and the advantage widens as slots get scarcer. The conflict is the point."
+"To be clear: this is decision support, not autonomous scheduling. A human approves every plan, and all data is fully synthetic. No real patient records, ever."
+"Five advocates, one referee, on Qwen Cloud and Alibaba Cloud. RehabPanel."
 )
 SUBS=(
-"RehabPanel — an agent society\nassisting a nurse coordinator"
-"56 patients due · only 43 slots this week"
-"3 nurses — acuity, overdue, continuity\nand preference compete for the time"
-"The priority rule is causal: zero continuity\n→ agents stop protecting primary-nurse matches"
-"Acuity-first draft = -141\n(no better than a single agent)"
-"5 advocates object, referee rules one\nconflict/round → value -141 → -70 (+71)"
-"Nurse sick Tuesday → score drops to -106,\npatients orphaned"
-"Re-plan: a warm negotiation repairs\nonly what broke"
-"4 of 39 appointments change;\nthe timeline recovers — minimal disruption"
+"RehabPanel — an agent society for rehab\nscheduling · Qwen Cloud · Track 3"
+"The problem: who to see, when, how —\nunder fixed time; demand > capacity"
+"One agent collapses the trade-off\n(anchors on acuity, drops the rest)"
+"One week: 56 patients due · 43 slots"
+"3 nurses · fixed weekly capacity"
+"5 advocates (1 objective each) +\nreferee + a pure-Python scorer"
+"Priority rule is causal: zero continuity\n→ agents stop trading for it"
+"Acuity-first draft = -141\n(= a single agent)"
+"Negotiate → referee logs each ruling →\nvalue -141 → -70 (+71)"
+"Nurse sick Tuesday → score drops\nto -106, patients orphaned"
+"Re-plan: a warm negotiation\nrepairs only what broke"
+"4 of 39 appointments change; score\nrecovers — minimal disruption"
 "25 runs: society wins every time,\nwidening with scarcity"
-"All Qwen on Alibaba Cloud ·\ndecision support · synthetic data"
+"Decision support, not autonomous ·\nfully synthetic data"
+"5 advocates + 1 referee ·\nQwen on Alibaba Cloud"
 )
 
 echo "== narrate + build scene clips =="
