@@ -73,12 +73,14 @@ def plan(patients, clinicians, slots, weights=None):
     if is_offline():
         return _greedy(patients, slots)
     prompt = build_prompt(patients, clinicians, slots)
-    assignments = validate(parse_assignments(
-        chat([{"role": "user", "content": prompt}], model=BASELINE_MODEL)), patients, slots)
-    if not assignments:  # re-prompt once on malformed/empty output
-        strict = prompt + "\nYour previous reply was not valid JSON. Reply with ONLY the JSON list."
-        assignments = validate(parse_assignments(
-            chat([{"role": "user", "content": strict}], model=BASELINE_MODEL)), patients, slots)
+    raw = chat([{"role": "user", "content": prompt}], model=BASELINE_MODEL)
+    assignments = validate(parse_assignments(raw), patients, slots)
+    if not assignments:  # re-prompt once, keeping the bad reply in history so the model can correct it
+        msgs = [{"role": "user", "content": prompt},
+                {"role": "assistant", "content": raw},
+                {"role": "user", "content": "That was not valid JSON. Reply with ONLY the JSON list "
+                                            "of {patient_id, slot_id, rationale}."}]
+        assignments = validate(parse_assignments(chat(msgs, model=BASELINE_MODEL)), patients, slots)
     return assignments
 
 

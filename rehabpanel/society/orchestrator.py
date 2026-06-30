@@ -112,6 +112,8 @@ def node_draft(state: SocietyState) -> dict:
     draft, used_s, used_p = [], set(), set()
     if seed:
         for a in seed:
+            if not isinstance(a, dict):
+                continue  # tolerate a corrupted/partial seed without crashing the draft
             sid, pid = a.get("slot_id"), a.get("patient_id")
             if sid in S and pid in P and sid not in used_s and pid not in used_p:
                 used_s.add(sid); used_p.add(pid)
@@ -236,8 +238,8 @@ def negotiate(tables, seed_draft=None, weights=None):
     snapshots, round...). No file IO — the API and CLI both call this. The scorer
     stays external; score snapshots afterwards."""
     init: SocietyState = {
-        "patients": tables["patients"], "clinicians": tables["clinicians"],
-        "slots": tables["slots"], "meta": tables.get("meta", {}),
+        "patients": tables.get("patients", []), "clinicians": tables.get("clinicians", []),
+        "slots": tables.get("slots", []), "meta": tables.get("meta", {}),
         "weights": weights or {}, "seed_draft": seed_draft or [],
         "draft": [], "objections": [], "ledger": [], "snapshots": [],
         "round": 0, "stalled": False,

@@ -95,8 +95,10 @@ def _scale(ctx, key, base):
     w = ctx.get("weights") or {}
     if key not in w:
         return base
-    d = _DEFAULT_W.get(key) or w[key]
-    return max(0, min(10, round(base * (w[key] / d)) if d else base))
+    d = _DEFAULT_W.get(key, w[key])   # reference weight (the default for known objectives)
+    if not d:                         # no positive reference to scale against -> leave unscaled
+        return base
+    return max(0, min(10, round(base * (w[key] / d))))
 
 
 # ---- deterministic critique per objective ----------------------------------

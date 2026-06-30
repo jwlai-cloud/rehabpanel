@@ -106,12 +106,19 @@ SUBS=(
 )
 
 echo "== narrate + build scene clips =="
-SRT="$BD/demo.srt"; : > "$SRT"; > "$BD/concat.txt"; t0=0; idx=1; VOICEMODE="say"
+SRT="$BD/demo.srt"; : > "$SRT"; > "$BD/concat.txt"; t0=0; idx=1
+# decide the TTS engine ONCE (avoid spawning a failing python per scene)
+USE_TTS=0
+if [ -f scripts/tts.py ] && [ -n "${DASHSCOPE_API_KEY:-}" ] && python -c "import dashscope" 2>/dev/null; then USE_TTS=1; fi
+used_tts=0; used_say=0
 ff(){ awk -v s="$1" 'BEGIN{printf "%02d:%02d:%06.3f",int(s/3600),int((s%3600)/60),s-int(s/60)*60}' | sed 's/\./,/'; }
 for i in "${!IMGS[@]}"; do
   n=$(printf "%02d" $((i+1)))
-  if python scripts/tts.py "${NARR[$i]}" "$BD/a$n.mp3" >/dev/null 2>&1; then AUD="$BD/a$n.mp3"; VOICEMODE="cosyvoice";
-  else say -v "$VOICE" -o "$BD/a$n.aiff" "${NARR[$i]}"; AUD="$BD/a$n.aiff"; fi
+  if [ "$USE_TTS" = 1 ] && python scripts/tts.py "${NARR[$i]}" "$BD/a$n.mp3" 2>>"$BD/tts.err"; then
+    AUD="$BD/a$n.mp3"; used_tts=1
+  else
+    say -v "$VOICE" -o "$BD/a$n.aiff" "${NARR[$i]}"; AUD="$BD/a$n.aiff"; used_say=1
+  fi
   dur=$(ffprobe -v quiet -of csv=p=0 -show_entries format=duration "$AUD"); len=$(awk -v d="$dur" 'BEGIN{print d+0.8}')
   case "${CROP[$i]}" in
     app)  VF="crop=2600:1440:0:0,scale=1280:720" ;;
@@ -131,4 +138,5 @@ echo "== concat + burn subtitles =="
 ffmpeg -y -i "$BD/raw.mp4" -vf "subtitles=$BD/demo.srt:force_style='Fontname=Arial,FontSize=20,PrimaryColour=&H00FFFFFF&,BorderStyle=4,BackColour=&HB0000000&,Outline=0,Shadow=0,MarginV=36,Alignment=2'" \
   -c:v libx264 -pix_fmt yuv420p -c:a aac "$ROOT/results/demo.mp4" >/dev/null 2>&1
 dur=$(ffprobe -v quiet -of csv=p=0 -show_entries format=duration "$ROOT/results/demo.mp4")
+VOICEMODE=$([ "$used_tts" = 1 ] && { [ "$used_say" = 1 ] && echo mixed || echo cosyvoice; } || echo say)
 echo "== done: results/demo.mp4 (${dur}s) · voice: $VOICEMODE =="
