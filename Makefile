@@ -1,4 +1,4 @@
-.PHONY: data baseline society benchmark ui demo test
+.PHONY: data baseline society benchmark ui demo video test
 SEED ?= 7
 RATIO ?= 1.3
 
@@ -22,3 +22,6 @@ ui:          ## bundle the latest run into ui/state.json for the demo
 
 demo: ui     ## build ui state, then launch the 3-panel demo UI (http://localhost:8000)
 	python -m http.server --directory ui 8000
+
+video:       ## render the demo video -> results/demo.mp4 (macOS: say + ffmpeg + Chrome)
+	bash scripts/make_video.sh
