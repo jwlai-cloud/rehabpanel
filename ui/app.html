@@ -126,7 +126,9 @@ function init(){
   $('#nav').innerHTML=VIEWS.map(([k,l])=>`<button data-v="${k}">${l}</button>`).join('');
   $('#nav').querySelectorAll('button').forEach(b=>b.onclick=()=>{view=b.dataset.v;location.hash=view;stop();render();});
   const h=location.hash.slice(1); if(VIEWS.some(v=>v[0]===h))view=h;   // deep-link to a view
-  cur=ST.rounds.length-1; render();
+  cur=ST.rounds.length-1;
+  const rp=new URLSearchParams(location.search).get('r'); if(rp!==null)cur=Math.max(0,+rp);  // deep-link a round
+  render();
 }
 function render(){
   const m=ST.meta;
