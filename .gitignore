@@ -8,7 +8,9 @@ results/*.png
 results/*.mp4
 .videobuild/
 !data/sample_seed/
-# demo/render tooling + assets — kept local for practice, not in the public repo
+# demo/render tooling, assets + videos — kept LOCAL for practice, not in the public repo
+demo-local/
+# (legacy paths, now consolidated into demo-local/)
 scripts/make_video.sh
 scripts/tts.py
 docs/video_script.md
