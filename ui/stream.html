@@ -38,6 +38,18 @@
   .chip{font:600 11px/1 ui-monospace,Menlo,monospace;border:1px solid;border-radius:999px;padding:3px 8px;margin:0 2px}
   .agreed{margin-left:auto;font:700 11px/1 ui-monospace,Menlo,monospace;color:#fff;background:var(--teal);border-radius:999px;padding:5px 11px}
   .muted{color:var(--muted)}
+  /* the per-round DECISION — the unmissable outcome (debate content is non-deterministic; the ruling is the point) */
+  .decision{display:flex;align-items:center;gap:12px;margin-top:12px;padding:12px 14px;background:var(--teal-soft);
+    border:1px solid #bfe0d8;border-left:4px solid var(--teal);border-radius:10px}
+  .decision .ic{font-size:18px;color:var(--teal-d)}
+  .decision .dt{font-size:13.5px;color:#1d3a34}.decision .dt b{color:var(--teal-d)}
+  .decision .verdict{margin-left:auto;font:800 11px/1 ui-monospace,Menlo,monospace;color:#fff;background:var(--teal);border-radius:999px;padding:6px 11px;white-space:nowrap}
+  .decision.no{background:#fdeeec;border-color:#f0c9c3;border-left-color:var(--red)}.decision.no .verdict{background:var(--red)}
+  /* start gate */
+  .gate{text-align:center;padding:40px 20px}
+  .start{font:700 16px/1 system-ui;color:#fff;background:var(--teal);border:0;border-radius:12px;padding:15px 30px;cursor:pointer;box-shadow:0 2px 8px rgba(11,110,99,.3)}
+  .start:hover{background:var(--teal-d)} .start:disabled{opacity:.5;cursor:default}
+  .gate p{color:var(--muted);margin:14px auto 0;max-width:46ch;font-size:14px}
 </style></head><body>
 <div class="wrap">
   <header>
@@ -46,17 +58,23 @@
     <div class="tag" id="mode">real Qwen · streaming</div>
   </header>
 
-  <div class="status"><span class="dot" id="dot"></span><span id="msg">Connecting to the agent society…</span></div>
-
-  <div class="strip">
-    <div class="kpi"><div class="v" id="k-round">—</div><div class="k">round</div></div>
-    <div class="kpi"><div class="v" id="k-value">—</div><div class="k">plan value</div></div>
-    <div class="kpi"><div class="v" id="k-cont">—</div><div class="k">continuity breaks</div></div>
-    <div class="kpi"><div class="v" id="k-pref">—</div><div class="k">pref mismatches</div></div>
+  <div class="gate" id="gate">
+    <button class="start" id="startBtn">▶ Start live negotiation</button>
+    <p>Five Qwen advocates and a charge-nurse referee debate the weekly schedule in real time.
+       Each round's ruling and its impact on the plan appear as the model produces them (~1–2 min).</p>
   </div>
 
-  <h2>Negotiation — five advocates + a charge-nurse referee, in real time</h2>
-  <div class="feed" id="feed"></div>
+  <div id="live" style="display:none">
+    <div class="status"><span class="dot" id="dot"></span><span id="msg">Connecting to the agent society…</span></div>
+    <div class="strip">
+      <div class="kpi"><div class="v" id="k-round">—</div><div class="k">round</div></div>
+      <div class="kpi"><div class="v" id="k-value">—</div><div class="k">plan value</div></div>
+      <div class="kpi"><div class="v" id="k-cont">—</div><div class="k">continuity breaks</div></div>
+      <div class="kpi"><div class="v" id="k-pref">—</div><div class="k">pref mismatches</div></div>
+    </div>
+    <h2>Negotiation — five advocates + a charge-nurse referee, in real time</h2>
+    <div class="feed" id="feed"></div>
+  </div>
 </div>
 <script>
 const ACOLOR={priority:'#cc4b3e',window:'#b06d12',continuity:'#0b6e63',capacity:'#51657a',preference:'#9a4fb0',referee:'#2563a8',
@@ -80,28 +98,38 @@ function roundCard(d){
     }).join('');
   }
   const chip=a=>`<span class="chip" style="border-color:${ACOLOR[a]||'#5a7287'};color:${ACOLOR[a]||'#5a7287'}">${esc(a)}</span>`;
+  const ruling=(tr&&tr.turns||[]).find(t=>t.stance==='ruling');
+  // the per-round DECISION + its measurable impact (deterministic, even if the debate text isn't)
+  const dl=(cur,prev,low)=>{const x=Math.round((cur-prev)*10)/10;if(!x)return '<b class="muted">0</b>';const good=low?x<0:x>0;return `<b style="color:${good?'#085a51':'#cc4b3e'}">${x>0?'+':''}${x}</b>`;};
+  const imp=`impact: value ${dl(d.value,prev.value,false)} · continuity ${dl(d.continuity_breaks,prev.cont,true)} · pref ${dl(d.preference_mismatches,prev.pref,true)}`;
+  const dec=tr?`<div class="decision ${tr.decision==='apply'?'':'no'}"><span class="ic">⚖</span>
+     <span class="dt"><b>${esc((ruling&&ruling.text)||'ruling')}</b> — ${imp}</span>
+     <span class="verdict">${tr.decision==='apply'?'✓ APPLIED':'✕ REJECTED'}</span></div>`:'';
   const coal=tr?`<div class="coal">FOR ${(tr.coalition_for||[]).map(chip).join('')||'—'} <b>${tr.for_value??''}</b>
-     · vs · AGAINST ${(tr.coalition_against||[]).map(chip).join('')||'—'} <b>${tr.against_value??''}</b>
-     <span class="agreed">${tr.decision==='apply'?'✓ AGREED':'✕ rejected'}</span></div>`:'';
+     · vs · AGAINST ${(tr.coalition_against||[]).map(chip).join('')||'—'} <b>${tr.against_value??''}</b></div>`:'';
   div.innerHTML=`<div class="rhead"><span class="rnum">ROUND ${d.round}</span>`+
     (tr?`<span class="slot">${esc(tr.contested)}</span>`:'<span class="muted">draft</span>')+
-    `<span class="rval">value ${d.value}</span></div>${turns}${coal}`;
+    `<span class="rval">value ${d.value}</span></div>${turns}${coal}${dec}`;
   feed.appendChild(div);
   window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'});
+  prev={value:d.value,cont:d.continuity_breaks,pref:d.preference_mismatches};
 }
-const es=new EventSource('/api/stream');
-es.onmessage=e=>{
-  const d=JSON.parse(e.data);
-  if(d.hello){ $('#msg').textContent=`Negotiating over ${d.patients} patients and ${d.slots} slots — watch the debate build…`; return; }
-  if(d.error){ $('#dot').className='dot err'; $('#msg').textContent='Stream error: '+d.error; es.close(); return; }
-  if(d.done){ $('#dot').className='dot done'; $('#msg').textContent='Negotiation complete — the society reached agreement.'; es.close(); return; }
-  bump('#k-round', d.round);
-  bump('#k-value', d.value, 'up');
-  bump('#k-cont', d.continuity_breaks);
-  bump('#k-pref', d.preference_mismatches);
-  if(d.transcript) roundCard(d);   // skip the round-0 draft card (no debate)
-  else if(d.round===0){ $('#k-value').textContent=d.value; }
-};
-es.onerror=()=>{ if($('#dot').className.indexOf('done')<0){ $('#dot').className='dot err'; $('#msg').textContent='Connection closed.'; } };
+let prev={value:0,cont:0,pref:0}, es=null;
+function start(){
+  $('#gate').style.display='none'; $('#live').style.display='block';
+  es=new EventSource('/api/stream');
+  es.onmessage=e=>{
+    const d=JSON.parse(e.data);
+    if(d.hello){ $('#msg').textContent=`Negotiating over ${d.patients} patients and ${d.slots} slots — watch the debate build…`; return; }
+    if(d.error){ $('#dot').className='dot err'; $('#msg').textContent='Stream error: '+d.error; es.close(); return; }
+    if(d.done){ $('#dot').className='dot done'; $('#msg').textContent='Negotiation complete — the society reached agreement.'; es.close(); return; }
+    bump('#k-round', d.round); bump('#k-value', d.value, 'up');
+    bump('#k-cont', d.continuity_breaks); bump('#k-pref', d.preference_mismatches);
+    if(d.transcript) roundCard(d);
+    else if(d.round===0){ prev={value:d.value,cont:d.continuity_breaks,pref:d.preference_mismatches}; }
+  };
+  es.onerror=()=>{ if($('#dot').className.indexOf('done')<0){ $('#dot').className='dot err'; $('#msg').textContent='Connection closed.'; } };
+}
+document.getElementById('startBtn').addEventListener('click', start);
 </script>
 </body></html>
