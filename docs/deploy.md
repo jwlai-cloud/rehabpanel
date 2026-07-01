@@ -1,17 +1,29 @@
 # Deploy — RehabPanel coordinator app
 
 The app is a FastAPI backend + a static SPA (`ui/app.html`) in one container.
-It runs **key-free** (deterministic offline engine) by default; set the Qwen key
-to drive the live agents. End target is **Alibaba Cloud** (matches the
-`dashscope-intl` endpoint in `qwen_client.py`).
+End target is **Alibaba Cloud** (matches the `dashscope-intl` endpoint in
+`qwen_client.py`).
+
+**Modes** (all set by env — the app never surfaces a deterministic-engine score):
+- **Default view** = a bundled recording of a *real* Qwen negotiation
+  (`rehabpanel/recordings/negotiation.jsonl`) — replays with **▶ Replay**, no key,
+  no tokens. Works even key-free.
+- **◉ Run live (Qwen)** = a *fresh* real negotiation. Needs `DASHSCOPE_API_KEY`
+  in the container; fires only when clicked (`/api/stream` forces live for its
+  duration, so the rest of the app stays cheap).
+
+**Recommended for judges (Config A):** `REHABPANEL_OFFLINE=1` + the key. Default
+browsing stays fast/free (shows the bundled real run); Run live does the real
+thing on demand. Do **not** set `REHABPANEL_OFFLINE=0` on a public URL — it makes
+every page load and incident call Qwen, draining the voucher.
 
 ## Local container
 ```bash
 docker build -t rehabpanel .
-docker run --rm -p 8000:8000 rehabpanel            # http://localhost:8000 (offline)
-# live Qwen agents:
+docker run --rm -p 8000:8000 rehabpanel            # http://localhost:8000 (Replay works, no key)
+# Config A — Run live fires real Qwen on click:
 docker run --rm -p 8000:8000 \
-  -e REHABPANEL_OFFLINE=0 -e DASHSCOPE_API_KEY=sk-... rehabpanel
+  -e REHABPANEL_OFFLINE=1 -e DASHSCOPE_API_KEY=sk-... rehabpanel
 ```
 `make docker-build` / `make docker-run` wrap these.
 
@@ -27,7 +39,7 @@ gives a running instance for the hackathon's proof-of-deployment screenshot:
    git clone https://github.com/jwlai-cloud/rehabpanel.git && cd rehabpanel
    docker build -t rehabpanel .
    docker run -d --restart unless-stopped -p 80:8000 \
-     -e REHABPANEL_OFFLINE=0 -e DASHSCOPE_API_KEY=sk-... rehabpanel   # or omit both for the free offline demo
+     -e REHABPANEL_OFFLINE=1 -e DASHSCOPE_API_KEY=sk-... rehabpanel   # Config A; omit the key for a free Replay-only demo
    ```
 4. **Firewall** → open TCP **80**. Open `http://<public-ip>` → the app.
 5. **Proof screenshot:** SAS console → your instance / Workbench Overview showing
@@ -51,8 +63,9 @@ Then deploy the image on one of:
 - **ECS** — a VM running `docker run` behind a security-group rule on :8000.
 
 Set env on the service:
-- `REHABPANEL_OFFLINE=0` and `DASHSCOPE_API_KEY` (as a secret) for live Qwen, or
-- leave defaults for a free, deterministic public demo.
+- `REHABPANEL_OFFLINE=1` and `DASHSCOPE_API_KEY` (as a secret) — Config A: default
+  Replay + Run live on demand, or
+- leave defaults (no key) for a free, Replay-only public demo.
 
 > ⚠️ Put the key in the platform's **secret/env store**, never in the image or git.
 

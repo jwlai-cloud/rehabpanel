@@ -31,17 +31,25 @@ synthetic caseload, scored by the **same** deterministic function:
 
 | demand / capacity | mean value gap (society − baseline) | min gap | feasible |
 |------:|------:|------:|:--:|
-| 0.8 | +45.2 | +29 | ✓ |
-| 1.0 | +64.2 | +46 | ✓ |
-| 1.2 | +65.2 | +34 | ✓ |
-| 1.4 | +70.8 | +44 | ✓ |
-| 1.6 | +66.6 | +52 | ✓ |
+| 0.8 | +28.2 | +18 | ✓ |
+| 1.0 | +40.2 | +30 | ✓ |
+| 1.2 | +41.0 | +27 | ✓ |
+| 1.4 | +44.2 | +29 | ✓ |
+| 1.6 | +42.2 | +36 | ✓ |
 
 The society **out-scores the baseline on every single run** (min gap > 0), the
 advantage **grows through the conflict-onset region** (0.8 → 1.4), and every plan
 stays capacity-feasible. Headline figure: `results/gap.png`. The gain comes from
 the society repairing continuity and preference that the single agent abandons,
 while holding high-acuity coverage constant.
+
+**Live proof (real Qwen).** The reproducible table above is the key-free offline
+reference; the app's **Run live** button streams a *real* negotiation. A recorded
+live run (bundled, replayable in-app) climbs **160 → 181 (+21)** over **12 rounds** —
+all five advocates voice objections each round and the flagship referee explains
+every ruling in prose. Live converges below the offline ceiling (~212) because the
+LLM critique is less exhaustive than the rule critique — an honest LLM-vs-reference
+gap, not a scorer artifact.
 
 **Second gain — adaptivity under disruption.** After an incident (nurse sick,
 cancellation, urgent referral), the society **warm-repairs** the plan with
@@ -56,11 +64,16 @@ scorer); we do **not** claim a raw-value win on re-plan.
   OpenAI-compatible `dashscope-intl.aliyuncs.com` endpoint (Alibaba Cloud). This
   file is the deployment-proof artifact.
 - **Distinct capabilities under one vendor** (ADR-3): differentiation by
-  **role/prompt + tool + model tier** — referee on `qwen3.7-max`, advocates on
-  cheap `qwen3.6-flash` (also the token-budget guard), baseline on a strong
-  `qwen3.7-plus` so the society's win is architectural, not model-horsepower.
-- **LangGraph** state machine: draft → critique → (conditional) → arbitrate →
-  loop → END. Deterministic control flow; autonomy lives inside each agent.
+  **role/prompt + tool + model tier** — the referee on a flagship Qwen tier, the
+  advocates on a fast/cheap tier (also the token-budget guard), the single-agent
+  baseline on a strong tier — so the society's win is architectural, not
+  model-horsepower. Exact ids are env-overridable and swap as quota / preview
+  strings shift; the UI never names one (advocates show "fast tier", referee
+  "flagship tier").
+- **LangGraph** state machine: draft → critique → negotiate → arbitrate → loop →
+  END. Deterministic control flow + a deterministic referee *decision*; autonomy
+  (each advocate's objections, and the referee's prose *rationale*) lives inside
+  the agents.
 - **Pure-Python deterministic scorer** (`scorer.py`, no LLM) scores both
   pipelines identically — reproducibility is the differentiator over typical
   entries. Locked by unit tests in CI.
@@ -70,8 +83,11 @@ scorer); we do **not** claim a raw-value win on re-plan.
   key-free without spending the voucher.
 - **Synthetic generator** with engineered scarcity & conflict (overdue spread,
   shared-clinician clustering, preference/capacity collisions). No real data.
-- **3-panel demo UI** (static HTML): weekly calendar, scrolling conflict ledger,
-  live scoreboard — with a scrubber that replays the negotiation round by round.
+- **Negotiation view**: weekly calendar + a live conflict ledger + a per-round
+  score spark + the round-by-round transcript (every advocate's objection and the
+  referee's prose ruling). Two triggers: **▶ Replay** — a bundled recording of a
+  real negotiation (no key / no tokens, the default view) — and **◉ Run live
+  (Qwen)** — a fresh real negotiation streamed round by round.
 - **CI**: GitHub Actions runs `make test` on every push/PR; `main` is
   branch-protected on it so the objective function can't drift.
 - **Coordinator app** (`make serve`): a FastAPI backend over an in-memory
@@ -84,9 +100,10 @@ scorer); we do **not** claim a raw-value win on re-plan.
 
 ## What's next
 
-Live-Qwen benchmark runs (currently the reproducible numbers use the offline
-reference path); learned/tuned objective weights from clinician input; richer
-modes (home-visit travel routing); an interactive "what-if" weight slider.
+Live-Qwen runs are now recorded and replayable in-app (the offline table stays the
+key-free reproducible reference); next: merge LLM + rule critique so live converges
+closer to the offline ceiling; learned/tuned objective weights from clinician
+input; richer modes (home-visit travel routing).
 
 ## Eligibility — new build
 
@@ -129,8 +146,8 @@ Driven by the **coordinator app** (`make serve`).
 |------|---------------|-----------|
 | 0:00–0:25 | **Caseload** + **Team** | "A coordinator has 56 patients due but 43 slots across three nurses. Acuity, overdue dates, continuity and preference all fight for the same time." |
 | 0:25–0:45 | **Rules** sliders | "This is the priority rule the society optimizes — and it's causal: drop continuity to zero and the agents stop protecting primary-nurse matches." |
-| 0:45–1:35 | **Schedule** → press **Play** | "Watch the society negotiate. Five advocates object, the charge-nurse referee resolves one conflict per round and logs it. Value climbs −141 → −70 — a +71 gain a single agent never finds." |
-| 1:35–2:20 | **Incident → Nurse sick → Re-plan** | "Reality breaks: a nurse calls in sick Tuesday. The score drops to −106, patients orphaned. Re-plan — the society warm-repairs, changing just 4 of 39 appointments; a single agent would re-shuffle the whole week." |
+| 0:45–1:45 | **Schedule** → press **◉ Run live (Qwen)** | "Watch the society negotiate — live. Each round all five advocates object on their own objective; the charge-nurse referee resolves one conflict and explains the ruling in plain language. Value climbs 160 → 181, +21 — a gain a single agent never finds. (▶ Replay shows the same recorded run instantly, no tokens.)" |
+| 1:45–2:20 | **Incident → Nurse sick → Re-plan** | "Reality breaks: a nurse calls in sick, orphaning patients. Re-plan — the society warm-repairs, changing only a handful of appointments; a single agent would re-shuffle the whole week." |
 | 2:20–2:45 | **KPIs** session timeline | "Every disruption dips, every re-plan recovers — with minimal disruption. That's the measurable efficiency." |
 | 2:45–3:00 | `gap.png` + `qwen_client.py` | "Across 25 runs the society wins every time, widening with scarcity. All Qwen on Alibaba Cloud, deterministic scorer, one-command reproduce. Decision support, synthetic data." |
 

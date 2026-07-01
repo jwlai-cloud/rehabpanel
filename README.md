@@ -33,16 +33,18 @@ make test        # unit tests
 
 | demand / capacity | mean value gap (society − baseline) | feasible |
 |------:|------:|:--:|
-| 0.8 | +45.2 | ✓ |
-| 1.0 | +64.2 | ✓ |
-| 1.2 | +65.2 | ✓ |
-| 1.4 | +70.8 | ✓ |
-| 1.6 | +66.6 | ✓ |
+| 0.8 | +28.2 | ✓ |
+| 1.0 | +40.2 | ✓ |
+| 1.2 | +41.0 | ✓ |
+| 1.4 | +44.2 | ✓ |
+| 1.6 | +42.2 | ✓ |
 
 The society out-scores the single agent on **every run**, and the advantage
 **grows through the conflict-onset region (0.8 → 1.4)** (`results/gap.png`). It
 wins by repairing continuity and preference that the single agent abandons, while
-holding high-acuity coverage constant.
+holding high-acuity coverage constant. A recorded **live** Qwen run (in-app
+**▶ Replay**) climbs 160 → 181 (+21) with all five advocates voicing objections
+and the referee explaining each ruling.
 
 ## Coordinator app (`make serve`)
 A multi-view app where the agent society **assists a nurse coordinator**: see the
@@ -56,9 +58,10 @@ repairs only what broke. Two measurable gains:
   (e.g. 4/39 appointments changed) — see `docs/architecture_app.svg`.
 
 FastAPI backend (`rehabpanel/api.py`) over an in-memory session; the SPA is
-`ui/app.html`. Runs key-free (deterministic) or on live Qwen with a key.
-Containerised: `make docker-build && make docker-run` — deploy to Alibaba Cloud
-per `docs/deploy.md`.
+`ui/app.html`. The Schedule view has **▶ Replay** (a recorded real Qwen
+negotiation — key-free, the default view) and **◉ Run live (Qwen)** (a fresh one,
+needs a key). Containerised: `make docker-build && make docker-run` — deploy to
+Alibaba Cloud per `docs/deploy.md` (Config A).
 
 ## How it works
 See `docs/RehabPanel_Design_Doc.md` and the architecture diagrams

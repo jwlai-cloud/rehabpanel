@@ -30,21 +30,35 @@ Core + coordinator app are built and tested (`make test` = 30 tests, CI-locked).
 - `society/advocates.py` — `critique()` + `propose_swap()` (LLM path + deterministic
   offline path); priority weights scale advocate severities (causal).
 - `society/orchestrator.py` — `negotiate(tables, seed_draft, weights)`: draft →
-  critique → arbitrate loop, **warm-start replan**, per-round objections; the
-  referee logs the conflict ledger. Scorer stays external.
+  critique → negotiate → arbitrate loop, **warm-start replan**, per-round objections;
+  the referee logs the conflict ledger. Scorer stays external. Round 0 draft is a
+  deterministic acuity-first fill (no LLM); autonomy lives in critique + ruling.
+  Per-round transcript surfaces **all five advocates' objections** (each its own
+  reason), and the **referee's ruling is written by the flagship model in prose**
+  (live) with the deterministic rule string as the reproducible fallback — the
+  decision itself stays deterministic (`_decide` on the priority ranking).
 - `baseline.py` — single-agent (LLM + offline greedy), hardened parse.
 - `benchmark.py` — scarcity sweep → `results/gap.png`.
 - **Coordinator app:** `api.py` (FastAPI) + `state_service.py` (in-memory session
   behind a `Store` interface; incident → warm re-plan; causal rules) +
   `ui/app.html` (5-view SPA). `make serve`. Container: `Dockerfile` + `docs/deploy.md`.
+  Entry points (consolidated): **▶ Replay** = replays a bundled recording of a real
+  Qwen negotiation (`/api/replay`, no key/tokens — the SPA's DEFAULT view); **◉ Run
+  live (Qwen)** = a fresh real negotiation streamed round-by-round (`/api/stream`,
+  needs the key). No offline-deterministic result is ever shown in the UI. Deploy =
+  Config A (`docs/deploy.md`): `REHABPANEL_OFFLINE=1` + key.
+- The UI never names a model — advocates show as "fast tier", the referee as
+  "flagship tier" — because the exact ids get swapped.
 - Demo video + render tooling are kept **local only** (not in the repo) — for
   personal demo/practice.
 
 ## Models & orchestration
-- Model tiers live in `rehabpanel/qwen_client.py`. Current lineup: referee
-  `qwen3.7-max`, baseline `qwen3.7-plus`, advocates `qwen3.6-flash`. Verify exact
-  ids against the Model Studio model list (preview strings shift); stable fallback
-  aliases are `qwen-max` / `qwen-plus` / `qwen-flash`.
+- Model tiers live in `rehabpanel/qwen_client.py`, all env-overridable
+  (`REHABPANEL_{REFEREE,BASELINE,ADVOCATE}_MODEL`). Differentiate by TIER, not vendor:
+  referee = flagship, advocates = fast, baseline = strong single. Exact ids shift
+  (preview strings) and the voucher quota per id varies, so treat them as swappable —
+  the shipped live demo pumps advocates to `qwen3.7-plus` + referee `qwen3.7-max`
+  (more quota + richer reasoning). Never surface an id in the UI (see above).
 - Orchestration uses **LangGraph** (`StateGraph`) as an explicit, deterministic
   state machine. Do NOT move the scorer or core state into the graph — the scorer
   stays pure-Python and external for reproducibility. Don't swap in an autonomous

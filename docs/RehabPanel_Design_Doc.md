@@ -116,13 +116,13 @@ sequenceDiagram
     Ref-->>Adv: final plan + conflict ledger
 ```
 
-1. **Draft** — Capacity emits a feasible empty skeleton; Priority fills by acuity (first pass).
-2. **Critique** — every other agent files objections with a 1–10 severity (e.g. *"P0014 is 6 days overdue and unscheduled — severity 8"*).
-3. **Negotiate** — agents propose swaps and state a *marginal value* for what they trade; a swap that helps one objective hurts another (the conflict, made explicit).
-4. **Arbitrate** — when two objections fight over one slot and can't both win, the referee rules using global weights + stated marginal values, and **logs the rationale** to the conflict ledger.
+1. **Draft** — a **deterministic acuity-first fill** (sickest first into free slots); no LLM — a feasible starting skeleton is a trivial sort+fill, so ≈ the single-agent score. Warm re-plan carries the current plan over and repairs only what an incident broke.
+2. **Critique** — all **five advocates run concurrently**, each filing objections on its one objective with a 1–10 severity (live: one Qwen call per advocate, cached caseload prefix; e.g. *"P0014 is 6 days overdue and unscheduled — severity 8"*).
+3. **Negotiate** — the single highest-severity objection sets the agenda: its advocate **proposes** a feasible swap, then a **deterministic impact model** groups the other advocates into **FOR / AGAINST** coalitions (whose objective the move improves / worsens).
+4. **Arbitrate** — the referee brokers on the global priority **ranking** (capacity ≻ acuity ≻ overdue ≻ continuity ≻ preference; capacity = absolute veto), approving iff FOR outranks AGAINST — so it can **reject**, not just rubber-stamp. The **decision is deterministic** (reproducible); live, the flagship referee also **writes the ruling rationale in prose**. Every ruling appends a line to the **conflict ledger**.
 5. Loop until no objection exceeds threshold or a round cap is hit. Output: final schedule + **conflict ledger**.
 
-The conflict ledger is the demo centerpiece — a single agent never shows this work:
+Every round's transcript shows **all five advocates' objections** (each its own reason) → the winner's proposal → FOR/AGAINST coalition → the referee's prose ruling. The conflict ledger is the demo centerpiece — a single agent never shows this work:
 > *Tue 10:00 — Priority wants P0014 (acuity 8); Continuity wants P0009 (primary-nurse match). Referee: P0014, acuity outweighs continuity at current weights. P0009 → Thu 14:00.*
 
 ---
