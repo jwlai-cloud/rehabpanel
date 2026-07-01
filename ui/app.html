@@ -89,6 +89,29 @@
   .muted{color:var(--muted)} .right{margin-left:auto}
   svg .base{stroke:var(--slate);stroke-dasharray:4 3} svg .ln{stroke:var(--teal);fill:none;stroke-width:2.5}
   svg .dotp{fill:var(--teal)} svg text{fill:var(--muted);font-size:11px}
+  /* negotiation transcript */
+  .contested{margin-bottom:10px;font-size:13px;color:var(--muted)}
+  .chat{display:flex;flex-direction:column;gap:6px}
+  .bub{border:1px solid var(--line2);border-left:4px solid var(--slate);border-radius:8px;
+    padding:6px 10px;font-size:12.5px;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+  .bub .who{font-weight:700} .bub .txt{flex:1}
+  .bub .stance{color:var(--muted);font-size:10.5px;text-transform:uppercase;letter-spacing:.05em}
+  .bub .v{font-variant-numeric:tabular-nums;color:var(--muted)}
+  .bub.ruling{background:var(--teal-soft);border-left-color:var(--teal);font-weight:600}
+  .bub.opp{background:#fff7ef}
+  .coal{display:flex;align-items:center;gap:10px;margin-top:12px;flex-wrap:wrap;font-size:12.5px}
+  .coal .side{display:flex;align-items:center;gap:6px} .coal .side b{font-variant-numeric:tabular-nums}
+  .coal .lbl{color:var(--muted);text-transform:uppercase;font-size:10.5px;letter-spacing:.06em;font-weight:700}
+  .coal .vs{color:var(--muted)}
+  .chip{border:1px solid;border-radius:999px;padding:1px 8px;font-size:11px;font-weight:600}
+  .verdict{margin-left:auto;padding:3px 12px;border-radius:999px;font-weight:700}
+  .verdict.ok{background:var(--teal-soft);color:var(--teal-d)} .verdict.no{background:#ececec;color:#777}
+  .agent{cursor:pointer} .agent:hover{border-color:var(--teal)}
+  .agent:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
+  .rejnote{margin-top:8px;font-size:11.5px;color:var(--muted);font-style:italic}
+  .prompt{white-space:pre-wrap;background:#0f2942;color:#e7eef5;border-radius:9px;padding:12px;
+    font-size:11.5px;line-height:1.5;max-height:240px;overflow:auto;margin-top:10px;
+    font-family:ui-monospace,Menlo,Consolas,monospace}
 </style>
 </head>
 <body>
@@ -153,12 +176,21 @@ function vSchedule(){
      </div>
      <div class="cal" id="cal"></div>
    </div>
+   <div class="panel">
+     <h2>This round's negotiation — proposals · coalitions · ruling</h2>
+     <div id="nego"></div>
+   </div>
    <div class="grid2">
      <div class="panel"><h2>Conflict ledger — referee rulings</h2><ul class="log" id="log"></ul></div>
      <div class="panel">
-       <h2>Agent society</h2><div class="agents">${ST.agents.map(a=>`
-         <div class="agent ${a.name==='referee'?'ref':''}"><div class="an">${a.name}</div>
+       <h2>Agent society — click a role for its prompt</h2>
+       <div class="agents">${ST.agents.map((a,i)=>`
+         <div class="agent ${a.name==='referee'?'ref':''}" role="button" tabindex="0"
+              aria-label="show ${a.name} prompt" onclick="togglePrompt(${i})"
+              onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();togglePrompt(${i})}">
+           <div class="an" style="color:${ACOLOR[a.name]||'var(--ink)'}">${a.name}</div>
            <div class="ao">${esc(a.objective)}</div><div class="at">${a.tier}</div></div>`).join('')}</div>
+       <pre id="prompt" class="prompt" style="display:none"></pre>
        <h2 style="margin-top:16px">Score per round vs single-agent baseline</h2>
        <div id="spark"></div>
      </div>
@@ -178,8 +210,39 @@ function setR(i){ cur=i; const R=ST.rounds[i], last=ST.rounds.length-1, draft=R.
     :'<li class="muted">No rulings yet.</li>';
   $('#log').scrollTop=$('#log').scrollHeight;
   $('#spark').innerHTML=spark(ST.rounds.map(r=>r.score.value), ST.scores.baseline.value);
+  renderNego(R);
 }
 function objText(o){ const e=Object.entries(o||{}); return e.length?'['+e.map(([k,v])=>`${k}×${v}`).join(', ')+']':''; }
+const ACOLOR={priority:'#cc4b3e',window:'#b06d12',continuity:'#0b6e63',capacity:'#51657a',preference:'#9a4fb0',referee:'#2563a8'};
+const STANCE_IC={objects:'⚑',proposes:'✎',supports:'▲',opposes:'▼',ruling:'⚖'};
+function renderNego(R){
+  const el=$('#nego'); if(!el) return;
+  const tr=R.transcript;
+  if(!tr){ el.innerHTML='<div class="muted">Acuity-first draft — negotiation begins next round. Press ▶ Play.</div>'; return; }
+  const dec=tr.decision==='apply';
+  const chip=a=>`<span class="chip" style="border-color:${ACOLOR[a]||'#5a7287'};color:${ACOLOR[a]||'#5a7287'}">${a}</span>`;
+  const bubbles=tr.turns.map(t=>{
+    const c=ACOLOR[t.agent]||'#5a7287';
+    const cls='bub'+(t.stance==='ruling'?' ruling':(t.stance==='opposes'?' opp':''));
+    return `<div class="${cls}" style="border-left-color:${c}">
+      <span class="who" style="color:${c}">${STANCE_IC[t.stance]||'•'} ${esc(t.role)}</span>
+      <span class="stance">${t.stance}</span><span class="txt">${esc(t.text)}</span>
+      ${t.value?`<span class="v">${t.value>0?'+':''}${t.value}</span>`:''}</div>`;
+  }).join('');
+  el.innerHTML=`<div class="contested">Contested slot: <b>${esc(tr.contested)}</b></div>
+    <div class="chat">${bubbles}</div>
+    <div class="coal">
+      <div class="side"><span class="lbl">Coalition FOR</span>${tr.coalition_for.map(chip).join('')||'<span class="muted">—</span>'}<b>${tr.for_value}</b></div>
+      <span class="vs">vs</span>
+      <div class="side"><span class="lbl">AGAINST</span>${tr.coalition_against.map(chip).join('')||'<span class="muted">—</span>'}<b>${tr.against_value}</b></div>
+      <span class="verdict ${dec?'ok':'no'}">${dec?'✓ AGREED':'✕ REJECTED'}</span>
+    </div>`+
+    ((tr.rejected&&tr.rejected.length)?`<div class="rejnote">Referee first rejected ${tr.rejected.length} proposal(s) this round: `+
+      tr.rejected.map(r=>esc(r.role+' @ '+r.contested)).join('; ')+`</div>`:'');
+}
+function togglePrompt(i){ const el=$('#prompt'), a=ST.agents[i]; if(!el)return;
+  if(el.style.display!=='none' && el.dataset.i==i){ el.style.display='none'; return; }
+  el.textContent=a.prompt||'(no prompt)'; el.dataset.i=i; el.style.display='block'; }
 function card(c,moved){ const a=c.acuity>=7?'acu':'acu lo';
   return `<div class="card ${c.continuity_ok?'':'brk'} ${moved?'moved':''}">
    <div class="nm"><span>${esc(c.patient)}</span><span class="${a}">A${c.acuity}</span></div>

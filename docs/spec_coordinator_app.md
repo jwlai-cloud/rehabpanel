@@ -81,8 +81,30 @@ tables + optional seed draft + weights and *return* state; existing `run()` CLIs
 become thin wrappers (file IO). `make society` etc. keep working. Scorer logic
 untouched.
 
-**Snapshot schema (per round):** `{round, draft, rulings, objections}`; the
-export/API layer scores each snapshot → adds `score`, `disruption`.
+**Snapshot schema (per round):** `{round, draft, rulings, objections, transcript}`;
+the export/API layer scores each snapshot → adds `score`, `disruption`.
+
+## Negotiation mechanics (the Negotiate phase)
+
+Completes the design's **Draft → Critique → Negotiate → Arbitrate** loop with a
+real `node_negotiate` between critique and arbitrate:
+
+1. The highest-severity actionable objection's advocate **proposes** a swap.
+2. A deterministic **impact model** (`_coalitions`, applies the move to a copy and
+   re-runs each advocate's rule critique) groups advocates into **FOR** (objective
+   improves) and **AGAINST** (worsens), sized by weighted objection-cost delta.
+3. The **referee brokers** on the global priority **ranking** — capacity ≻ acuity
+   (priority) ≻ overdue (window) ≻ continuity ≻ preference — approving iff the FOR
+   coalition's top objective outranks AGAINST (capacity = absolute veto). This
+   lets the referee **reject** a move (e.g. don't drop a high-acuity patient for a
+   lower-priority gain), not just rubber-stamp.
+4. Each round emits a structured **transcript** (`turns`: objects/proposes/
+   supports/opposes/ruling; `coalition_for/against` + values; `decision`) that
+   drives the UI chat + the ledger line.
+
+The impact model is deterministic even online (uses the rule critiques, not LLM
+calls) so it can't blow the token budget; the scorer is **not** consulted inside
+the graph (guardrail intact).
 
 ## Views
 

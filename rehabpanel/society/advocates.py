@@ -7,7 +7,7 @@ Each advocate exposes:
         [{patient_id, slot_id, severity, reason}]   (capacity: {slot_id, clinician_id, severity, reason})
   - propose_swap(objection, state) -> {move:{patient_id, slot_id}, marginal_value, reason}
 
-Two execution paths behind one contract (see docs/spec_negotiation.md):
+Two execution paths behind one contract (see docs/spec_coordinator_app.md):
   * LLM path   — calls Qwen with prompts/<name>.md as the system prompt.
   * offline path (qwen_client.is_offline()) — a deterministic, pure-Python
     reference negotiator implementing the SAME objective by rule, so CI / tests /

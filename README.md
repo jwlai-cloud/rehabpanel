@@ -19,7 +19,6 @@ make baseline    # single-agent scheduler
 make society     # multi-agent negotiation -> schedule + conflict ledger
 make benchmark   # baseline vs society across seeds + a scarcity sweep
 make serve       # coordinator app at http://localhost:8000 (live backend)
-make demo        # static 3-panel scrub UI at http://localhost:8000
 make test        # unit tests
 ```
 
@@ -70,8 +69,7 @@ is reproducible: `make benchmark` regenerates every number.
 
 ## Docs
 - `docs/RehabPanel_Design_Doc.md` — design + ADRs
-- `docs/spec_negotiation.md` — negotiation engine spec
-- `docs/spec_coordinator_app.md` — coordinator-app redesign spec
+- `docs/spec_coordinator_app.md` — coordinator-app spec
 - `docs/SUBMISSION.md` — submission packet + video script
 - `docs/deploy.md` — container + Alibaba Cloud deploy
 - `docs/BUILD_LOG.md` — running build record

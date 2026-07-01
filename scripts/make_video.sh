@@ -27,6 +27,11 @@ curl -sf "$URL/api/state" >/dev/null || { echo "server not up"; cat /tmp/rehab_v
 shoot(){ "$CHROME" --headless=new --disable-gpu --hide-scrollbars --force-device-scale-factor=2 \
   --window-size=1300,820 --default-background-color=FFFFFFFF \
   --screenshot="$2" --virtual-time-budget=3500 "$1" >/dev/null 2>&1; }
+# taller viewport so the negotiation panel (below the calendar) is in-frame; the
+# 'nego' crop below lifts that band. Used only for the initial ?r=1 schedule.
+shoot_tall(){ "$CHROME" --headless=new --disable-gpu --hide-scrollbars --force-device-scale-factor=2 \
+  --window-size=1300,2000 --default-background-color=FFFFFFFF \
+  --screenshot="$2" --virtual-time-budget=3500 "$1" >/dev/null 2>&1; }
 
 HEAD='<!doctype html><html><head><meta charset="utf-8"><style>
  html,body{margin:0;width:1280px;height:720px;overflow:hidden;background:#eef3f7;color:#0f2942;
@@ -59,6 +64,7 @@ shoot "file://$BD/how.html"     "$BD/06.png"
 shoot "$URL/#rules"             "$BD/07.png"
 shoot "$URL/?r=0#schedule"      "$BD/08.png"
 shoot "$URL/?r=99#schedule"     "$BD/09.png"
+shoot_tall "$URL/?r=1#schedule" "$BD/nego.png"   # negotiation panel (initial round 1)
 echo "== incident: nurse sick =="; curl -sf -X POST "$URL/api/incident/sick" >/dev/null
 shoot "$URL/#kpis"              "$BD/10.png"
 echo "== re-plan (warm) =="; curl -sf -X POST "$URL/api/replan" >/dev/null
@@ -68,11 +74,11 @@ shoot "file://$BD/scope.html"   "$BD/14.png"
 shoot "file://$BD/closing.html" "$BD/15.png"
 
 IMGS=( "$BD/01.png" "$BD/02.png" "$BD/03.png" "$BD/04.png" "$BD/05.png" "$BD/06.png" "$BD/07.png" \
-       "$BD/08.png" "$BD/09.png" "$BD/10.png" "$BD/11.png" "$BD/12.png" "$ROOT/results/gap.png" "$BD/14.png" "$BD/15.png" )
-CROP=( card card card app app card app app app app app app gap card card )
+       "$BD/08.png" "$BD/09.png" "$BD/nego.png" "$BD/10.png" "$BD/11.png" "$BD/12.png" "$ROOT/results/gap.png" "$BD/14.png" "$BD/15.png" )
+CROP=( card card card app app card app app app nego app app app gap card card )
 NARR=(
 "RehabPanel — an AI agent society that helps a rehab nurse coordinator plan the week. Built for Track 3 on Qwen Cloud."
-"Here is the problem. Every cycle a rehab nurse decides which patients to follow up, when, and how, under fixed clinician time. Acuity, overdue follow-ups, continuity of care and patient preference all compete for the same scarce slots. Demand usually exceeds capacity, and the call lives in one person's head."
+"Here is the problem. Every cycle a rehab nurse decides which patients to follow up, when, and how, under fixed clinician time. Acuity, overdue follow-ups, continuity of care and patient preference all compete for the same scarce slots, and demand usually exceeds capacity."
 "Why agents? A single scheduling agent collapses the trade-off. It anchors on acuity, fills greedily, and lets overdue patients and continuity quietly rot. We wanted the conflict made explicit, and negotiated."
 "Take one real week: fifty-six patients due, only forty-three slots. Each patient carries an acuity score, an overdue date, a primary nurse, and a mode preference."
 "Across three nurses with fixed weekly capacity. The squeeze is real."
@@ -80,6 +86,7 @@ NARR=(
 "The coordinator sets the priority rule, and it is causal: drop continuity to zero and the agents stop trading for primary-nurse matches."
 "The first pass fills by acuity and scores minus one forty-one, exactly what a single agent would do."
 "Then they negotiate. Advocates object, the referee rules and logs each decision. Value climbs to minus seventy, a seventy-one point gain a lone agent never finds."
+"Look inside one round. Continuity objects that a patient is booked with the wrong nurse and proposes a swap; Preference backs it, forming a coalition; the referee approves. The logic: advocates form for-and-against coalitions on each proposal, and the referee brokers on a fixed priority ranking — capacity, acuity, overdue, continuity, preference — approving only when the winning side outranks the opposition."
 "But reality breaks. A nurse calls in sick on Tuesday; her slots vanish and patients are orphaned. The live score drops to minus one hundred six."
 "The coordinator hits re-plan. The society runs a warm negotiation, repairing only what the incident broke, not reshuffling the whole week."
 "Just four of thirty-nine appointments change, and the score recovers. Minimal disruption: patients keep their slots. That is the efficiency that matters in a clinic."
@@ -97,6 +104,7 @@ SUBS=(
 "Priority rule is causal: zero continuity\n→ agents stop trading for it"
 "Acuity-first draft = -141\n(= a single agent)"
 "Negotiate → referee logs each ruling →\nvalue -141 → -70 (+71)"
+"Inside one round: Continuity proposes, Preference backs it →\nreferee brokers coalitions on priority (capacity>acuity>…)"
 "Nurse sick Tuesday → score drops\nto -106, patients orphaned"
 "Re-plan: a warm negotiation\nrepairs only what broke"
 "4 of 39 appointments change; score\nrecovers — minimal disruption"
@@ -119,9 +127,10 @@ for i in "${!IMGS[@]}"; do
   else
     say -v "$VOICE" -o "$BD/a$n.aiff" "${NARR[$i]}"; AUD="$BD/a$n.aiff"; used_say=1
   fi
-  dur=$(ffprobe -v quiet -of csv=p=0 -show_entries format=duration "$AUD"); len=$(awk -v d="$dur" 'BEGIN{print d+0.8}')
+  dur=$(ffprobe -v quiet -of csv=p=0 -show_entries format=duration "$AUD"); len=$(awk -v d="$dur" 'BEGIN{print d+0.5}')
   case "${CROP[$i]}" in
     app)  VF="crop=2600:1440:0:0,scale=1280:720" ;;
+    nego) VF="crop=2600:1440:0:2360,scale=1280:720" ;;   # lift the negotiation panel band
     gap)  VF="scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=white" ;;
     *)    VF="scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=0xeef3f7" ;;
   esac

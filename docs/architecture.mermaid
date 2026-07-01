@@ -14,14 +14,16 @@ flowchart TB
     end
 
     subgraph SOC["Society — LangGraph negotiation (orchestrator.py)"]
-        DR["node_draft<br/>acuity-first skeleton"]
+        DR["node_draft<br/>acuity-first skeleton (or warm seed)"]
         CR["node_critique<br/>5 advocates file objections"]
         CD{"should_continue<br/>hot objection &amp; round &lt; cap?"}
-        AR["node_arbitrate<br/>referee resolves ONE conflict<br/>+ one ledger line"]
+        NG["node_negotiate<br/>advocate proposes · FOR/AGAINST<br/>coalitions · referee brokers (rank)"]
+        AR["node_arbitrate<br/>apply brokered move<br/>+ ledger line + transcript"]
         EN(["END"])
         DR --> CR
         CR --> CD
-        CD -- yes --> AR
+        CD -- yes --> NG
+        NG --> AR
         AR --> CR
         CD -- "no · stalled / no hot" --> EN
     end

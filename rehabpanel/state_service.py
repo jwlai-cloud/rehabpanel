@@ -7,17 +7,33 @@ pure-Python source of truth. No file IO.
 """
 from __future__ import annotations
 from datetime import date
+from pathlib import Path
 from typing import Protocol
 
 from . import generator, baseline
 from .society import orchestrator as O
 from .scorer import score, DEFAULT_WEIGHTS
-from .ui_export import _cells  # render-ready calendar rows (pure)
 
 SCORE_KEYS = ("value", "acuity_coverage", "overdue_days", "continuity_breaks",
               "preference_mismatches", "patients_scheduled", "feasible")
 
 INCIDENTS = ("sick", "cancel", "referral")
+
+# the agent roster shown in the UI (name, objective, model tier)
+_AGENTS = [
+    ("priority", "high-acuity seen", "qwen3.6-flash"),
+    ("window", "overdue follow-ups", "qwen3.6-flash"),
+    ("continuity", "stay with primary nurse", "qwen3.6-flash"),
+    ("capacity", "feasibility (veto)", "qwen3.6-flash"),
+    ("preference", "mode/availability", "qwen3.6-flash"),
+    ("referee", "arbitrate + log", "qwen3.7-max"),
+]
+_PROMPTS = Path(__file__).resolve().parent / "society" / "prompts"
+
+
+def _prompt(name):
+    p = _PROMPTS / f"{name}.md"
+    return p.read_text() if p.exists() else ""
 
 
 # ---- persistence boundary (in-memory now; DB later) ------------------------
@@ -41,6 +57,32 @@ class InMemoryStore:
 
 
 # ---- helpers ---------------------------------------------------------------
+
+def _cells(assignments, P, S, C):
+    """Render-ready per-assignment calendar rows (pure)."""
+    out = []
+    for a in assignments:
+        s, p = S.get(a["slot_id"]), P.get(a["patient_id"])
+        if not s or not p:
+            continue
+        out.append({
+            "slot_id": s["slot_id"],
+            "day": date.fromisoformat(s["date"]).strftime("%a"),
+            "date": s["date"],
+            "time": s.get("start_time", ""),
+            "clinician_id": s["clinician_id"],
+            "clinician": C.get(s["clinician_id"], {}).get("name", s["clinician_id"]),
+            "mode": s["mode"],
+            "patient_id": p["patient_id"],
+            "patient": p["name"],
+            "acuity": p["acuity_score"],
+            "continuity_ok": s["clinician_id"] == p["primary_clinician_id"],
+            "pref_ok": s["mode"] == p["preferred_mode"],
+            "round": a.get("assigned_in_round", 0),
+        })
+    out.sort(key=lambda c: (c["date"], c["clinician_id"], c["time"]))
+    return out
+
 
 def _slim(s):
     return {k: s[k] for k in SCORE_KEYS}
@@ -205,6 +247,7 @@ class CoordinatorService:
                 "round": snap["round"], "score": _slim(sc),
                 "cells": _cells(snap["draft"], P, S, C), "ledger": list(cum),
                 "objections": _summarise_objections(snap.get("objections", [])),
+                "transcript": snap.get("transcript"),   # the round's negotiation exchange
                 "moved": sum(1 for c in _cells(snap["draft"], P, S, C) if c["round"] == snap["round"]),
             })
         disruption = _disruption(w["pre_replan_plan"], w["committed_plan"]) if w["pre_replan_plan"] else None
@@ -214,14 +257,8 @@ class CoordinatorService:
             "clinicians": [{"id": c["clinician_id"], "name": c["name"],
                             "status": w["roster_status"].get(c["clinician_id"], "available"),
                             "cap": c["weekly_capacity_slots"]} for c in t["clinicians"]],
-            "agents": [
-                {"name": "priority", "objective": "high-acuity seen", "tier": "qwen3.6-flash"},
-                {"name": "window", "objective": "overdue follow-ups", "tier": "qwen3.6-flash"},
-                {"name": "continuity", "objective": "stay with primary nurse", "tier": "qwen3.6-flash"},
-                {"name": "capacity", "objective": "feasibility (veto)", "tier": "qwen3.6-flash"},
-                {"name": "preference", "objective": "mode/availability", "tier": "qwen3.6-flash"},
-                {"name": "referee", "objective": "arbitrate + log", "tier": "qwen3.7-max"},
-            ],
+            "agents": [{"name": n, "objective": o, "tier": ti, "prompt": _prompt(n)}
+                       for n, o, ti in _AGENTS],
             "scores": {"committed": _slim(committed), "baseline": _slim(base)},
             "disruption": disruption,
             "capacity": _capacity(w["committed_plan"], t["clinicians"], t["slots"]),

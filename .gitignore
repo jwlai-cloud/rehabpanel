@@ -7,6 +7,5 @@ results/*.json
 results/*.png
 results/*.mp4
 .videobuild/
-ui/state.json
 !data/sample_seed/
 .DS_Store

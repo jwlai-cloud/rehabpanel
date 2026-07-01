@@ -129,7 +129,7 @@ The conflict ledger is the demo centerpiece — a single agent never shows this 
 
 ## 5. Data Flow & Schema
 
-Five synthetic JSON tables (full schema in the handoff doc and generator). Output of both pipelines is `assignments.json`; the society additionally emits `conflict_ledger.json`.
+Five synthetic JSON tables (full schema in `rehabpanel/schema.py` and the generator). Output of both pipelines is `assignments.json`; the society additionally emits `conflict_ledger.json`.
 
 ```
 Generator(seed, demand_capacity_ratio)
@@ -148,7 +148,7 @@ The single most persuasive figure: sweep `demand_capacity_ratio` from 0.8 → 1.
 ### ADR-1: Deterministic Python scorer, not an LLM judge
 **Decision:** score both pipelines with a pure-Python objective function.
 **Why:** an LLM judge is non-reproducible and biasable; judges can re-run a Python scorer and get identical numbers. Reproducibility is the single biggest differentiator over typical hackathon entries.
-**Consequence:** the objective weights must be defined and defensible (sourced from domain input, see handoff §questions). Harder: encoding "clinical value" numerically — mitigated by treating weights as configurable and reporting sensitivity.
+**Consequence:** the objective weights must be defined and defensible (sourced from domain input). Harder: encoding "clinical value" numerically — mitigated by treating weights as configurable and reporting sensitivity.
 
 ### ADR-2: Synthetic data generated in-repo, no real/anonymized records
 **Decision:** ship a seeded generator; never ingest real data.
@@ -190,3 +190,31 @@ The single most persuasive figure: sweep `demand_capacity_ratio` from 0.8 → 1.
 | Negotiation loops / non-termination | Hard round cap + objection-severity threshold to exit |
 | "It's just an ensemble" critique | Advocates argue from *distinct objectives* with marginal-value trades, not majority vote |
 | Eligibility (proprietary data / novelty) | Synthetic-only data; fresh build; explicit "what's new" paragraph |
+
+---
+
+## 9. Evolution — the coordinator app (post-MVP)
+
+The batch pipeline above (baseline vs society + benchmark) stays the reproducible
+core. On top of it, we built a **coordinator app** so the society is *operated*,
+not just measured. Full spec: `spec_coordinator_app.md`; architecture:
+`architecture_app.svg`.
+
+- **Framing.** The agent society **assists a nurse coordinator**: the coordinator
+  sets roster, caseload and the priority rule; the society negotiates and shows
+  its work; the coordinator reviews the conflict ledger and approves.
+- **Incident-driven re-planning.** A nurse calls in sick, a patient cancels, or
+  an urgent referral arrives → the live score drops → **Re-plan** runs a *warm*
+  negotiation that repairs only what broke.
+- **Two measurable gains.** (1) Initial-plan value vs the single-agent baseline —
+  the headline, widening with scarcity. (2) After a disruption, **minimal
+  disruption**: the society warm-repairs changing few appointments where a cold
+  single agent would churn the whole week. Disruption is a diff reported *outside*
+  the locked scorer (we don't claim a raw-value win on re-plan).
+- **Causal priority weights.** The Rules view changes both the score and the
+  agents' priorities — offline, advocate severities scale by weight; online, the
+  weights go into the prompts.
+- **Stack.** FastAPI backend over an in-memory session behind a `Store` interface
+  (a DB slots in later); a 5-view SPA (Caseload · Team · Rules ·
+  Schedule/Negotiation · KPIs). Deploy: `deploy.md`.
+- **Scorer unchanged** — still pure-Python, external, and CI-locked.
