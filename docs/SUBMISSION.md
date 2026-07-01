@@ -57,7 +57,8 @@ scorer); we do **not** claim a raw-value win on re-plan.
   file is the deployment-proof artifact.
 - **Distinct capabilities under one vendor** (ADR-3): differentiation by
   **role/prompt + tool + model tier** — referee on `qwen3.7-max`, advocates on
-  cheap `qwen3.6-flash` (also the token-budget guard), baseline `qwen3.6-plus`.
+  cheap `qwen3.6-flash` (also the token-budget guard), baseline on a strong
+  `qwen3.7-plus` so the society's win is architectural, not model-horsepower.
 - **LangGraph** state machine: draft → critique → (conditional) → arbitrate →
   loop → END. Deterministic control flow; autonomy lives inside each agent.
 - **Pure-Python deterministic scorer** (`scorer.py`, no LLM) scores both

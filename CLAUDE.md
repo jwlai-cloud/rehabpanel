@@ -42,7 +42,7 @@ Core + coordinator app are built and tested (`make test` = 30 tests, CI-locked).
 
 ## Models & orchestration
 - Model tiers live in `rehabpanel/qwen_client.py`. Current lineup: referee
-  `qwen3.7-max`, baseline `qwen3.6-plus`, advocates `qwen3.6-flash`. Verify exact
+  `qwen3.7-max`, baseline `qwen3.7-plus`, advocates `qwen3.6-flash`. Verify exact
   ids against the Model Studio model list (preview strings shift); stable fallback
   aliases are `qwen-max` / `qwen-plus` / `qwen-flash`.
 - Orchestration uses **LangGraph** (`StateGraph`) as an explicit, deterministic
