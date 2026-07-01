@@ -8,4 +8,10 @@ results/*.png
 results/*.mp4
 .videobuild/
 !data/sample_seed/
+# demo/render tooling + assets — kept local for practice, not in the public repo
+scripts/make_video.sh
+scripts/tts.py
+docs/video_script.md
+docs/assets/
+ARTIFACTS.md
 .DS_Store
