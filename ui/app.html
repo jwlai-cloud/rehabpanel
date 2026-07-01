@@ -246,7 +246,7 @@ function setR(i){ cur=i; const R=ST.rounds[i], last=ST.rounds.length-1, draft=R.
 function objText(o){ const e=Object.entries(o||{}); return e.length?'['+e.map(([k,v])=>`${k}×${v}`).join(', ')+']':''; }
 const ACOLOR={priority:'#cc4b3e',window:'#b06d12',continuity:'#0b6e63',capacity:'#51657a',preference:'#9a4fb0',referee:'#2563a8'};
 const STANCE_IC={objects:'⚑',proposes:'✎',counters:'⇄',supports:'▲',opposes:'▼',ruling:'⚖'};
-const UPTO=(()=>{const u=new URLSearchParams(location.search).get('upto');return u==null?null:Math.max(0,+u);})();  // waterfall capture
+const UPTO=(()=>{const u=new URLSearchParams(location.search).get('upto');if(u==null)return null;const n=+u;return Number.isFinite(n)?Math.max(0,Math.floor(n)):null;})();  // waterfall capture (null on garbage)
 function renderNego(R, upto){
   const el=$('#nego'); if(!el) return;
   const tr=R.transcript;
@@ -254,14 +254,15 @@ function renderNego(R, upto){
   const turns = (upto!=null) ? tr.turns.slice(0, upto) : tr.turns;   // ?upto=K reveals turns one at a time
   const full = (upto==null) || upto>=tr.turns.length;
   const dec=tr.decision==='apply';
-  const chip=a=>`<span class="chip" style="border-color:${ACOLOR[a]||'#5a7287'};color:${ACOLOR[a]||'#5a7287'}">${a}</span>`;
+  const chip=a=>`<span class="chip" style="border-color:${ACOLOR[a]||'#5a7287'};color:${ACOLOR[a]||'#5a7287'}">${esc(a)}</span>`;
   const bubbles=turns.map((t,i)=>{
     const c=ACOLOR[t.agent]||'#5a7287';
     const cls='bub wf'+(t.stance==='ruling'?' ruling':(t.stance==='opposes'?' opp':''));
+    const v=Number(t.value);   // agent JSON may carry a non-numeric value
     return `<div class="${cls}" style="border-left-color:${c};animation-delay:${(i*0.12).toFixed(2)}s">
       <span class="who" style="color:${c}">${STANCE_IC[t.stance]||'•'} ${esc(t.role)}</span>
-      <span class="stance">${t.stance}</span><span class="txt">${esc(t.text)}</span>
-      ${t.value?`<span class="v">${t.value>0?'+':''}${t.value}</span>`:''}</div>`;
+      <span class="stance">${esc(t.stance)}</span><span class="txt">${esc(t.text)}</span>
+      ${Number.isFinite(v)&&v!==0?`<span class="v">${v>0?'+':''}${v}</span>`:''}</div>`;
   }).join('');
   const coal = full ? `<div class="coal">
       <div class="side"><span class="lbl">Coalition FOR</span>${tr.coalition_for.map(chip).join('')||'<span class="muted">—</span>'}<b>${tr.for_value}</b></div>

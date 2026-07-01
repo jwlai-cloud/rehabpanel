@@ -49,7 +49,7 @@ def chat(messages, model=ADVOCATE_MODEL, temperature=0.2, **kw):
     (enable_thinking=False) — ~10x fewer output tokens + faster, which matters for
     both latency and the $40 voucher. Callers can override via extra_body."""
     extra = {"enable_thinking": False}
-    extra.update(kw.pop("extra_body", {}))
+    extra.update(kw.pop("extra_body", None) or {})   # tolerate an explicit extra_body=None
     resp = client().chat.completions.create(
         model=model, messages=messages, temperature=temperature, extra_body=extra, **kw
     )

@@ -201,7 +201,7 @@ def _decide(forc, against):
 
 
 def _margin(forc, against):
-    """Signed priority margin (top FOR rank − top AGAINST rank); very negative on a
+    """Signed priority margin (top FOR rank - top AGAINST rank); very negative on a
     capacity veto or no FOR. Used to choose between competing proposals."""
     if any(a["agent"] == "capacity" for a in against):
         return -999
@@ -239,6 +239,13 @@ def _transcript(top, swap, forc, against, label, decision, counter=None, chosen=
     `counter` (bargaining mode), it records the opposer's counter-proposal and which
     side the referee chose."""
     by = top.get("by")
+    # the "active" proposer whose move is actually applied — the counter-proposer
+    # when the referee chose the counter, else the original proposer. Drives both
+    # the skipped 'supports' turn (they already spoke via proposes/counters) and
+    # the ledger attribution, so the ledger names who really won.
+    counter_won = bool(decision and chosen == "counter" and counter)
+    win = counter["agent"] if counter_won else by
+    win_reason = counter.get("reason", "") if counter_won else swap.get("reason", "")
     turns = [
         {"agent": by, "role": _ROLE.get(by, by), "stance": "objects",
          "text": top.get("reason", ""), "value": top.get("severity", 0)},
@@ -250,7 +257,7 @@ def _transcript(top, swap, forc, against, label, decision, counter=None, chosen=
         turns.append({"agent": ca, "role": _ROLE.get(ca, ca), "stance": "counters",
                       "text": counter.get("reason", ""), "value": counter.get("marginal_value", 0)})
     for f in forc:
-        if f["agent"] == by:
+        if f["agent"] == win:
             continue
         turns.append({"agent": f["agent"], "role": _ROLE.get(f["agent"], f["agent"]),
                       "stance": "supports", "text": "objective improves", "value": f["value"]})
@@ -267,7 +274,7 @@ def _transcript(top, swap, forc, against, label, decision, counter=None, chosen=
         rule = f"approves — coalition FOR ({for_v}) vs AGAINST ({ag_v})"
     turns.append({"agent": "referee", "role": _ROLE["referee"], "stance": "ruling",
                   "text": rule + " at current weights", "value": for_v - ag_v})
-    line = f"{label} — {_ROLE.get(by, by)}: {swap.get('reason', '')}. Referee {rule}."
+    line = f"{label} — {_ROLE.get(win, win)}: {win_reason}. Referee {rule}."
     return {"contested": label, "turns": turns,
             "coalition_for": [f["agent"] for f in forc], "for_value": for_v,
             "coalition_against": [a["agent"] for a in against], "against_value": ag_v,
@@ -301,7 +308,7 @@ def node_negotiate(state: SocietyState) -> dict:
             oo, oa = _top_obj(opp, state), advocates.get(opp)
             counter_swap = _propose(oo, oa, state, S, P) if (oo and oa) else None
             if counter_swap:                               # a concrete alternative move
-                counter = {"agent": opp, **counter_swap}
+                counter = {**counter_swap, "agent": opp}   # explicit opp wins over any model-returned 'agent'
                 c_forc, c_against = _coalitions(counter_swap["move"], state)
             else:                                          # else the opposer defends the status quo
                 oppval = next((a["value"] for a in against if a["agent"] == opp), 0)

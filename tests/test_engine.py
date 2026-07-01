@@ -104,6 +104,7 @@ def test_incident_replan_surfaces_opposition():
 def test_bargaining_produces_counter_proposals():
     """With REHABPANEL_BARGAIN=1, a contested re-plan round yields a counter-turn
     (the opposer's alternative) — a genuine multi-turn exchange. Off by default."""
+    prev = os.environ.get("REHABPANEL_BARGAIN")
     os.environ["REHABPANEL_BARGAIN"] = "1"
     try:
         t = _tables()
@@ -115,7 +116,27 @@ def test_bargaining_produces_counter_proposals():
                     and any(x["stance"] == "counters" for x in tr["turns"])]
         assert counters, "bargaining produced no counter-proposals"
     finally:
-        os.environ.pop("REHABPANEL_BARGAIN", None)
+        os.environ.pop("REHABPANEL_BARGAIN", None) if prev is None else os.environ.update(REHABPANEL_BARGAIN=prev)
+
+
+def test_counter_win_is_attributed_to_the_counter_proposer():
+    """When the referee picks the COUNTER, the ledger + coalition transcript must
+    credit the counter-proposer, not the original proposer (else the demo's ledger
+    lies about who won)."""
+    from rehabpanel.society.orchestrator import _transcript
+    top = {"by": "priority", "reason": "acuity 8 unscheduled", "severity": 8}
+    swap = {"reason": "seat P13 over P00", "marginal_value": 8, "move": {"patient_id": "P13"}}
+    counter = {"agent": "window", "reason": "hold — keep the current assignment", "marginal_value": 3}
+    # coalitions AS SEEN FOR THE CHOSEN COUNTER: window (its own counter) + continuity support it
+    forc = [{"agent": "window", "value": 3}, {"agent": "continuity", "value": 5}]
+    against = [{"agent": "preference", "value": 2}]
+    tr = _transcript(top, swap, forc, against, "Mon 13:00", True, counter=counter, chosen="counter")
+    assert "Follow-up Window" in tr["ledger"] and "hold" in tr["ledger"]
+    assert "seat P13" not in tr["ledger"]                       # not the losing original proposal
+    stances = {t["agent"]: t["stance"] for t in tr["turns"]}
+    assert stances["window"] == "counters"                      # window spoke as counter, not a redundant 'supports'
+    assert not any(t["agent"] == "window" and t["stance"] == "supports" for t in tr["turns"])
+    assert stances["continuity"] == "supports"                  # the genuine supporter still shows
 
 
 def test_priority_weights_are_causal():
