@@ -79,6 +79,18 @@
   .tile{border:1px solid var(--line2);border-radius:11px;padding:12px 14px;background:var(--col)}
   .tile .v{font-size:24px;font-weight:800;font-variant-numeric:tabular-nums} .tile .k{color:var(--muted);font-size:12px}
   .tile .v.good{color:var(--teal)} .tile .v.bad{color:var(--red)}
+  /* society vs single-agent comparison */
+  .cmpgap{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 9px;background:var(--teal-soft);border:1px solid #bfe0d8;border-radius:10px;padding:8px 15px;margin:2px 0 4px}
+  .cmpgap>b{font-size:23px;color:var(--teal-d);font-variant-numeric:tabular-nums;font-weight:800}
+  .cmpgap span{font-size:12px;color:var(--muted)}
+  .cmp{min-width:0}
+  .cmptab{width:100%;table-layout:fixed;border-collapse:collapse;font-size:13px;margin-top:12px}
+  .cmptab th{text-align:right;color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.04em;padding:7px 10px;border-bottom:1px solid var(--line)}
+  .cmptab th:first-child{text-align:left}
+  .cmptab td{padding:7px 10px;border-bottom:1px solid var(--line2);text-align:right;font-variant-numeric:tabular-nums}
+  .cmptab td:first-child{text-align:left;color:var(--muted)}
+  .cmptab td.win{color:var(--teal-d);font-weight:800;background:var(--teal-soft)}
+  .cmptab .hint{font-size:11px;color:var(--muted);font-weight:400}
   /* sliders */
   .rule{display:grid;grid-template-columns:130px 1fr 48px;gap:12px;align-items:center;margin-bottom:12px}
   .rule input{width:100%;accent-color:var(--teal)}
@@ -188,9 +200,35 @@ function render(){
 }
 
 /* ---------- Schedule + Negotiation ---------- */
+function cmpNum(x){ return parseFloat(String(x).replace('%','').split('/')[0]); }
+function cmpBlock(){                                   // society vs single-agent, same scorer
+  const s=ST.scores; if(!s||!s.baseline||!s.committed) return '';
+  const b=s.baseline, c=s.committed;
+  const gap=Math.round((c.value-b.value)*10)/10;
+  const rows=[
+    ['Total score', b.value, c.value, 'hi', 'higher is better'],
+    ['Patients scheduled', b.patients_scheduled, c.patients_scheduled, 'hi', ''],
+    ['High-acuity coverage', Math.round(b.acuity_coverage*100)+'%', Math.round(c.acuity_coverage*100)+'%', 'hi', ''],
+    ['Overdue days', b.overdue_days, c.overdue_days, 'lo', 'lower is better'],
+    ['Continuity breaks', b.continuity_breaks, c.continuity_breaks, 'lo', ''],
+    ['Preference mismatches', b.preference_mismatches, c.preference_mismatches, 'lo', ''],
+  ];
+  const body=rows.map(([lbl,bv,cv,dir,hint])=>{
+    const nb=cmpNum(bv), nc=cmpNum(cv); let bw='',cw='';
+    if(nb!==nc){ (((dir==='hi')?nc>nb:nc<nb) ? cw='win' : bw='win'); }
+    return `<tr><td>${esc(lbl)}${hint?` <span class="hint">(${hint})</span>`:''}</td>`+
+      `<td class="${bw} num">${esc(String(bv))}</td><td class="${cw} num">${esc(String(cv))}</td></tr>`;
+  }).join('');
+  return `<div class="panel cmp">
+     <h2>Society vs single agent — same week, same scorer</h2>
+     <div class="cmpgap"><b>${gap>0?'+':''}${gap}</b><span>the society's multi-objective advantage — from negotiation, not a bigger model. Single agent runs a strong <b>qwen3.7-plus</b> in one pass; the society is 5 advocates + a referee.</span></div>
+     <table class="cmptab"><thead><tr><th>Objective</th><th>Single agent</th><th>Society (5+1)</th></tr></thead><tbody>${body}</tbody></table>
+   </div>`;
+}
 function vSchedule(){
   const R=ST.rounds, last=R.length-1; if(cur>last)cur=last;
   $('#main').innerHTML=`
+   ${cmpBlock()}
    <div class="panel">
      <h2>Negotiation — watch the society re-plan</h2>
      <div class="scrub">
