@@ -222,6 +222,7 @@ function vSchedule(){
      </div>
    </div>`;
   setR(cur);
+  if(UPTO!=null){const p=$('#nego').closest('.panel');$('#main').replaceChildren(p);}  // waterfall capture: bubbles only, no spoiler ledger
 }
 function setR(i){ cur=i; const R=ST.rounds[i], last=ST.rounds.length-1, draft=R.round===0;
   $('#sl').value=i;
