@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Protocol
 
 from . import generator, baseline
+from .qwen_client import is_offline, BASELINE_MODEL
 from .society import orchestrator as O
 from .scorer import score, DEFAULT_WEIGHTS
 
@@ -253,6 +254,7 @@ class CoordinatorService:
         disruption = _disruption(w["pre_replan_plan"], w["committed_plan"]) if w["pre_replan_plan"] else None
         return {
             "meta": t["meta"], "weights": w["weights"], "headline_gap": w["headline_gap"],
+            "live": not is_offline(), "baseline_model": BASELINE_MODEL,   # so the UI states its real mode
             "days": ["Mon", "Tue", "Wed", "Thu", "Fri"],
             "clinicians": [{"id": c["clinician_id"], "name": c["name"],
                             "status": w["roster_status"].get(c["clinician_id"], "available"),

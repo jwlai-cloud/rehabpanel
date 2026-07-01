@@ -221,7 +221,7 @@ function cmpBlock(){                                   // society vs single-agen
   }).join('');
   return `<div class="panel cmp">
      <h2>Society vs single agent — same week, same scorer</h2>
-     <div class="cmpgap"><b>${gap>0?'+':''}${gap}</b><span>the society's multi-objective advantage — from negotiation, not a bigger model. Single agent runs a strong <b>qwen3.7-plus</b> in one pass; the society is 5 advocates + a referee.</span></div>
+     <div class="cmpgap"><b>${gap>0?'+':''}${gap}</b><span>the society's multi-objective advantage — from negotiation, not a bigger model. Both plans use the <b>same scorer</b>. ${ST.live?`Live: the single agent is one real <b>${esc(ST.baseline_model||'qwen3.7-plus')}</b> pass; the society is 5 advocates + a referee, all Qwen.`:`Offline (reproducible): the single agent is a deterministic acuity-first pass; live mode swaps in a real <b>qwen3.7-plus</b>.`}</span></div>
      <table class="cmptab"><thead><tr><th>Objective</th><th>Single agent</th><th>Society (5+1)</th></tr></thead><tbody>${body}</tbody></table>
    </div>`;
 }
