@@ -12,7 +12,6 @@ from typing import Protocol
 from . import generator, baseline
 from .society import orchestrator as O
 from .scorer import score, DEFAULT_WEIGHTS
-from .ui_export import _cells  # render-ready calendar rows (pure)
 
 SCORE_KEYS = ("value", "acuity_coverage", "overdue_days", "continuity_breaks",
               "preference_mismatches", "patients_scheduled", "feasible")
@@ -41,6 +40,32 @@ class InMemoryStore:
 
 
 # ---- helpers ---------------------------------------------------------------
+
+def _cells(assignments, P, S, C):
+    """Render-ready per-assignment calendar rows (pure)."""
+    out = []
+    for a in assignments:
+        s, p = S.get(a["slot_id"]), P.get(a["patient_id"])
+        if not s or not p:
+            continue
+        out.append({
+            "slot_id": s["slot_id"],
+            "day": date.fromisoformat(s["date"]).strftime("%a"),
+            "date": s["date"],
+            "time": s.get("start_time", ""),
+            "clinician_id": s["clinician_id"],
+            "clinician": C.get(s["clinician_id"], {}).get("name", s["clinician_id"]),
+            "mode": s["mode"],
+            "patient_id": p["patient_id"],
+            "patient": p["name"],
+            "acuity": p["acuity_score"],
+            "continuity_ok": s["clinician_id"] == p["primary_clinician_id"],
+            "pref_ok": s["mode"] == p["preferred_mode"],
+            "round": a.get("assigned_in_round", 0),
+        })
+    out.sort(key=lambda c: (c["date"], c["clinician_id"], c["time"]))
+    return out
+
 
 def _slim(s):
     return {k: s[k] for k in SCORE_KEYS}

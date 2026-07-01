@@ -21,7 +21,6 @@ Where each submission artifact lives and how to regenerate it.
 | Demo video (~1:17, 11 scenes) | `results/demo.mp4` | `make video` |
 | Benchmark metrics | `results/metrics.json` | `make benchmark` |
 | Synthetic caseload | `data/*.json` | `make data` |
-| UI snapshot state | `ui/state.json` | `make ui` |
 
 > For the submission: upload `results/demo.mp4` to YouTube/Devpost and link it
 > there (kept out of git to avoid binary churn as it's re-recorded). Run

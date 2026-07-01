@@ -19,7 +19,6 @@ make baseline    # single-agent scheduler
 make society     # multi-agent negotiation -> schedule + conflict ledger
 make benchmark   # baseline vs society across seeds + a scarcity sweep
 make serve       # coordinator app at http://localhost:8000 (live backend)
-make demo        # static 3-panel scrub UI at http://localhost:8000
 make test        # unit tests
 ```
 

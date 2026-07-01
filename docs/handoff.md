@@ -1,5 +1,9 @@
 # RehabPanel — Build & Handoff Doc
 
+> **Historical** — the original build plan. The project has shipped; some commands
+> here are superseded (e.g. the demo UI is now the coordinator app: `make serve`).
+> Current source of truth: `docs/spec_coordinator_app.md` and `docs/BUILD_LOG.md`.
+
 Everything needed to go from empty repo to a submittable Track 3 project. Pairs with `RehabPanel_Design_Doc.md`.
 
 ---

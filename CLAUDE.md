@@ -7,8 +7,9 @@ negotiate which patients to follow up under scarce clinician slots. The thesis:
 a single agent collapses the trade-off; a negotiating society reaches a higher
 multi-objective score, and the gap widens with scarcity.
 
-Read `docs/RehabPanel_Design_Doc.md` for the full design and `docs/handoff.md`
-for the build plan before making changes.
+Read `docs/RehabPanel_Design_Doc.md` (design, incl. §9 the coordinator app) and
+`docs/spec_coordinator_app.md` before making changes. `docs/BUILD_LOG.md` is the
+running record; `docs/handoff.md` is the original build plan (history).
 
 ## Hard guardrails (do not violate)
 1. **No real or anonymized patient data — ever.** All data comes from
@@ -21,22 +22,23 @@ for the build plan before making changes.
 4. **Framing is decision-support, not autonomous clinical scheduling.**
 5. Keep agent messages short — the budget is a $40 voucher.
 
-## State of the code
-DONE & tested:
-- `generator.py` — seeded synthetic caseload; `--ratio` controls scarcity (use >1).
-- `scorer.py` — deterministic objective; `tests/test_scorer.py` passes (3 tests).
-- `schema.py`, `qwen_client.py` — complete.
-- All six agent prompts in `rehabpanel/society/prompts/`.
-
-TODO (search the code for `TODO(claude-code)`):
-- `society/advocates.py` — implement `critique()` and `propose_swap()` LLM calls.
-- `society/orchestrator.py` — the LangGraph state machine is wired (draft →
-  critique → conditional → arbitrate → loop → END). Implement the referee LLM
-  call inside `node_arbitrate` (see the TODO there) so it resolves the top
-  objection, applies the swap to `draft`, and returns a ledger entry.
-- `baseline.py` — already functional; harden JSON parsing/validation.
-- `benchmark.py` — add the matplotlib chart (mean gap vs ratio → results/gap.png).
-- `ui/` — build the 3-panel demo (calendar + conflict ledger + scoreboard).
+## State of the code — SHIPPED
+Core + coordinator app are built and tested (`make test` = 30 tests, CI-locked).
+- `generator.py` — seeded synthetic caseload (`--ratio` scarcity); `generate()`
+  returns the tables in-memory (still writes files for the CLI).
+- `scorer.py` — deterministic objective (pure Python), locked by `tests/test_scorer.py`.
+- `society/advocates.py` — `critique()` + `propose_swap()` (LLM path + deterministic
+  offline path); priority weights scale advocate severities (causal).
+- `society/orchestrator.py` — `negotiate(tables, seed_draft, weights)`: draft →
+  critique → arbitrate loop, **warm-start replan**, per-round objections; the
+  referee logs the conflict ledger. Scorer stays external.
+- `baseline.py` — single-agent (LLM + offline greedy), hardened parse.
+- `benchmark.py` — scarcity sweep → `results/gap.png`.
+- **Coordinator app:** `api.py` (FastAPI) + `state_service.py` (in-memory session
+  behind a `Store` interface; incident → warm re-plan; causal rules) +
+  `ui/app.html` (5-view SPA). `make serve`.
+- `scripts/make_video.sh` (+ `scripts/tts.py`) — the ~3-min demo video
+  (CosyVoice if a key is set, else macOS `say`). `Dockerfile` + `docs/deploy.md`.
 
 ## Models & orchestration
 - Model tiers live in `rehabpanel/qwen_client.py`. Current lineup: referee
@@ -56,10 +58,12 @@ TODO (search the code for `TODO(claude-code)`):
 - Run `make test` after touching the scorer; run `make benchmark` to regenerate
   the headline number.
 
-## First task suggestion
-Follow **NEXT_STEPS.md** — the ordered, current plan with definitions of done.
+## Working on this repo now
+The build is shipped. Source of truth: `docs/spec_coordinator_app.md` (the app)
+and `docs/spec_negotiation.md` (the engine); `docs/BUILD_LOG.md` for history.
 
-Implement `advocates.py` + the orchestrator loop, then run
-`make data && make baseline && make society && make benchmark` and confirm the
-society's value exceeds the baseline's at ratio >= 1.2. If it doesn't, the bug
-is in negotiation, not the scorer.
+- `make test` after anything scorer-adjacent · `make serve` to run the app ·
+  `make benchmark` to regenerate the headline gap · `make video` for the demo.
+- Guardrails stay sacred: Qwen-only, and the scorer stays pure-Python + external
+  + CI-locked. If the society ever fails to beat the baseline at ratio >= 1.2,
+  the bug is in negotiation, not the scorer.

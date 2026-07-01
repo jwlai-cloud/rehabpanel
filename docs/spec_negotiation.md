@@ -1,7 +1,8 @@
 # Spec: Negotiation Society (advocates + referee)
 
 Implements the stubbed core of RehabPanel — the `feat/negotiation` branch.
-Pairs with `RehabPanel_Design_Doc.md` (§3–4) and `NEXT_STEPS.md` (steps 1–6).
+Pairs with `RehabPanel_Design_Doc.md` (§3–4). Historical: this is the engine
+spec; the app that operates it is specced in `spec_coordinator_app.md`.
 This spec is the review contract; the PR is the human gate (branch protection on
 `main` requires it).
 
@@ -109,9 +110,8 @@ LLM-path parsing is unit-tested with monkeypatched `chat`.
 2. `pytest -q` green, including `test_negotiation.py` proving society ≥ baseline
    at ratio ≥ 1.2 and a widening gap.
 3. `make benchmark` writes `results/metrics.json` + `results/gap.png`.
-4. `make demo` serves a 3-panel UI rendered from the real output JSON.
-5. With `DASHSCOPE_API_KEY` set, the same commands run the live Qwen agents
-   (LLM path) unchanged.
+4. With `DASHSCOPE_API_KEY` set, the same commands run the live Qwen agents
+   (LLM path) unchanged. (The demo UI is now the coordinator app — `make serve`.)
 
 ## Open Questions (non-blocking; resolved by defaults)
 
