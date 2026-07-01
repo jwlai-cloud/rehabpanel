@@ -247,36 +247,60 @@ def _top_obj(agent, state):
     return max(objs, key=lambda o: o.get("severity", 0)) if objs else None
 
 
-def _transcript(top, swap, forc, against, label, decision, counter=None, chosen="proposal"):
-    """Structured negotiation exchange — drives the UI chat + ledger line. With a
-    `counter` (bargaining mode), it records the opposer's counter-proposal and which
-    side the referee chose."""
+def _system_referee():
+    p = PROMPTS / "referee.md"
+    return p.read_text() if p.exists() else \
+        "You are the charge-nurse referee arbitrating a rehab scheduling negotiation."
+
+
+def _referee_rationale(label, win_role, win_reason, forc, against, decision):
+    """(B) The flagship referee writes its ruling rationale in prose — LIVE ONLY.
+    Returns '' offline or on any failure, so the deterministic ruling text stays the
+    reproducible fallback. This ADDS reasoning to the chat; it never changes the
+    decision (still made by _decide) or the scorer."""
+    if is_offline():
+        return ""
+    fobj = ", ".join(_ROLE.get(f["agent"], f["agent"]) for f in forc) or "none"
+    aobj = ", ".join(_ROLE.get(a["agent"], a["agent"]) for a in against) or "none"
+    user = (f"Contested slot {label}. Proposal by {win_role}: {win_reason}\n"
+            f"Objectives it improves: {fobj}\nObjectives it worsens: {aobj}\n"
+            "Priority ranking: capacity > acuity > overdue > continuity > preference.\n"
+            f"Verdict (already decided): {'APPROVE' if decision else 'REJECT'}.\n"
+            "In ONE plain sentence, explain WHY this ruling is right on that ranking. No preamble.")
+    try:
+        msg = [{"role": "system", "content": _system_referee()}, {"role": "user", "content": user}]
+        return ((chat(msg, model=REFEREE_MODEL) or "").strip().split("\n")[0])[:240]
+    except Exception:
+        return ""
+
+
+def _transcript(top, swap, forc, against, label, decision, counter=None, chosen="proposal",
+                objections=None, ruling_text=""):
+    """Structured negotiation exchange — drives the UI chat + ledger line.
+    (A) Every advocate that filed an objection this round speaks, with its OWN reason
+    (top-severity per advocate) — so all five voices are visible, not just the winner.
+    (B) `ruling_text` (LLM prose) drives the referee bubble when present; the
+    deterministic rule string is the fallback and the ledger's audit line."""
     by = top.get("by")
-    # the "active" proposer whose move is actually applied — the counter-proposer
-    # when the referee chose the counter, else the original proposer. Drives both
-    # the skipped 'supports' turn (they already spoke via proposes/counters) and
-    # the ledger attribution, so the ledger names who really won.
     counter_won = bool(decision and chosen == "counter" and counter)
-    win = counter["agent"] if counter_won else by
+    win = counter["agent"] if counter_won else by            # who actually won — for ledger attribution
     win_reason = counter.get("reason", "") if counter_won else swap.get("reason", "")
-    turns = [
-        {"agent": by, "role": _ROLE.get(by, by), "stance": "objects",
-         "text": top.get("reason", ""), "value": top.get("severity", 0)},
-        {"agent": by, "role": _ROLE.get(by, by), "stance": "proposes",
-         "text": swap.get("reason", ""), "value": swap.get("marginal_value", 0)},
-    ]
+    # (A) one 'objects' turn per advocate, its own LLM reason, ordered by severity
+    top_by_agent = {}
+    for o in (objections or [top]):
+        a = o.get("by")
+        if a and o.get("severity", 0) > top_by_agent.get(a, {}).get("severity", -1):
+            top_by_agent[a] = o
+    voiced = sorted(top_by_agent.values(), key=lambda o: -o.get("severity", 0)) or [top]
+    turns = [{"agent": o.get("by"), "role": _ROLE.get(o.get("by"), o.get("by")),
+              "stance": "objects", "text": o.get("reason", ""), "value": o.get("severity", 0)}
+             for o in voiced]
+    turns.append({"agent": by, "role": _ROLE.get(by, by), "stance": "proposes",
+                  "text": swap.get("reason", ""), "value": swap.get("marginal_value", 0)})
     if counter:
         ca = counter["agent"]
         turns.append({"agent": ca, "role": _ROLE.get(ca, ca), "stance": "counters",
                       "text": counter.get("reason", ""), "value": counter.get("marginal_value", 0)})
-    for f in forc:
-        if f["agent"] == win:
-            continue
-        turns.append({"agent": f["agent"], "role": _ROLE.get(f["agent"], f["agent"]),
-                      "stance": "supports", "text": "objective improves", "value": f["value"]})
-    for a in against:
-        turns.append({"agent": a["agent"], "role": _ROLE.get(a["agent"], a["agent"]),
-                      "stance": "opposes", "text": "objective worsens", "value": a["value"]})
     for_v = sum(f["value"] for f in forc)
     ag_v = sum(a["value"] for a in against)
     if not decision:
@@ -286,7 +310,8 @@ def _transcript(top, swap, forc, against, label, decision, counter=None, chosen=
     else:
         rule = f"approves — coalition FOR ({for_v}) vs AGAINST ({ag_v})"
     turns.append({"agent": "referee", "role": _ROLE["referee"], "stance": "ruling",
-                  "text": rule + " at current weights", "value": for_v - ag_v})
+                  "text": (ruling_text or "").strip() or (rule + " at current weights"),
+                  "value": for_v - ag_v})
     line = f"{label} — {_ROLE.get(win, win)}: {win_reason}. Referee {rule}."
     return {"contested": label, "turns": turns,
             "coalition_for": [f["agent"] for f in forc], "for_value": for_v,
@@ -335,11 +360,16 @@ def node_negotiate(state: SocietyState) -> dict:
         label = _slot_label(S[swap["move"]["slot_id"]])
         if chosen:
             _, move_, f_, a_ = chosen
-            tr = _transcript(top, swap, f_, a_, label, True, counter=counter, chosen=chosen[0])
+            wa = counter["agent"] if (chosen[0] == "counter" and counter) else top.get("by")
+            wr = counter.get("reason", "") if (chosen[0] == "counter" and counter) else swap.get("reason", "")
+            ruling_text = _referee_rationale(label, _ROLE.get(wa, wa), wr, f_, a_, True)  # (B) live prose
+            tr = _transcript(top, swap, f_, a_, label, True, counter=counter, chosen=chosen[0],
+                             objections=state["objections"], ruling_text=ruling_text)     # (A) all voices
             tr["rejected"] = rejected
             return {"nego": {"move": move_, "transcript": tr, "line": tr["ledger"]}}
-        tr = _transcript(top, swap, forc, against, label, False, counter=counter)
-        rejected.append({"contested": tr["contested"], "role": tr["turns"][0]["role"],
+        tr = _transcript(top, swap, forc, against, label, False, counter=counter,
+                         objections=state["objections"])
+        rejected.append({"contested": tr["contested"], "role": _ROLE.get(top.get("by"), top.get("by")),
                          "line": tr["ledger"]})
     return {"nego": {"move": None, "rejected": rejected}, "stalled": True}
 

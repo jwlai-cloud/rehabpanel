@@ -1,6 +1,7 @@
 # RehabPanel coordinator app — FastAPI + static SPA.
-# Runs key-free (deterministic offline engine) by default; set
-# REHABPANEL_OFFLINE=0 + DASHSCOPE_API_KEY to drive the live Qwen agents.
+# Default view replays a bundled real Qwen negotiation (no key). Add
+# DASHSCOPE_API_KEY (keep REHABPANEL_OFFLINE=1) so the "Run live" button
+# fires a fresh real negotiation on click. See docs/deploy.md (Config A).
 FROM python:3.11-slim
 
 WORKDIR /app

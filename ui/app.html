@@ -19,6 +19,10 @@
   .dg{color:var(--teal-d);font-weight:800}   /* impact: improved */
   .db{color:var(--red);font-weight:800}       /* impact: worsened */
   .d0{color:var(--muted)}
+  .livebtn{background:#2563a8;color:#fff;border:0;border-radius:9px;padding:8px 13px;font-weight:700;cursor:pointer}
+  .livebtn:hover{background:#1e5391} .livebtn:disabled{opacity:.7;cursor:default}
+  .livebtn.on{animation:lpulse 1.1s infinite}
+  @keyframes lpulse{0%,100%{box-shadow:0 0 0 0 rgba(37,99,168,.5)}50%{box-shadow:0 0 0 7px rgba(37,99,168,0)}}
   header{background:var(--panel);border-bottom:1px solid var(--line);border-top:3px solid var(--teal);
     padding:12px 20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
   header h1{font-size:18px;margin:0;font-weight:800}
@@ -151,8 +155,7 @@
   <button class="danger" onclick="act('POST','/incident/sick')">🤒 Nurse sick</button>
   <button class="danger" onclick="act('POST','/incident/cancel')">✕ Patient cancels</button>
   <button class="danger" onclick="act('POST','/incident/referral')">＋ Urgent referral</button>
-  <a class="right livelink" href="/stream" title="watch a real-time Qwen negotiation stream">▶ Watch live</a>
-  <button id="snd" onclick="toggleSound()" title="speak referee rulings + alert on incidents">🔇 Sound</button>
+  <button class="right" id="snd" onclick="toggleSound()" title="speak referee rulings + alert on incidents">🔇 Sound</button>
   <button class="primary" onclick="act('POST','/replan')">⟳ Re-plan</button>
 </div>
 <div class="alerts" id="alerts"></div>
@@ -180,7 +183,35 @@ const alarm=()=>{tone(500,0.16,0.24,'sawtooth');setTimeout(()=>tone(360,0.3,0.24
 const api=(m,p,b)=>fetch('/api'+p,{method:m,headers:{'Content-Type':'application/json'},
   body:b?JSON.stringify(b):undefined}).then(r=>r.json());
 
-async function boot(){ ST=await fetch('/api/state').then(r=>r.json()); init(); }
+async function boot(){ ST=await fetch('/api/state').then(r=>r.json()); init();
+  const q=new URLSearchParams(location.search);
+  if(q.has('replay')) return bootReplay(q);                          // deep-link: single-frame capture
+  if(q.has('live')){ setTimeout(runLive,400); return; }              // deep-link: auto-start live
+  loadReplay(false); }                                               // default: show the recorded REAL run — never the deterministic society
+// load the recorded real-Qwen run into ST as the default/played negotiation (no tokens)
+async function loadReplay(autoplay){
+  const ev=await fetch('/api/replay').then(r=>r.json()).catch(()=>null);
+  if(!ev||!ev.events||!ev.events.length) return false;
+  ST.rounds=ev.events.map(_mkRound);
+  const fs=ST.rounds[ST.rounds.length-1].score;                      // comparison + header reflect the real negotiated result
+  if(ST.scores&&ST.scores.committed) Object.assign(ST.scores.committed,
+    {value:fs.value,continuity_breaks:fs.continuity_breaks,preference_mismatches:fs.preference_mismatches,patients_scheduled:fs.patients_scheduled});
+  if(ST.scores&&ST.scores.baseline) ST.headline_gap=Math.round((fs.value-ST.scores.baseline.value)*10)/10;
+  view='schedule';
+  if(autoplay){ cur=0; render(); play(); } else { cur=ST.rounds.length-1; render(); }
+  return true; }
+// replay a recorded real-Qwen negotiation into the same panels, cumulatively up to ?fr=K (static → screenshottable)
+async function bootReplay(q){
+  const ev=await fetch('/api/replay').then(r=>r.json()).catch(()=>null);
+  if(!ev||!ev.events||!ev.events.length){ $('#st').innerHTML='<b>Replay:</b> no recording'; return; }
+  const fr=q.has('fr')?Math.max(0,Math.min(+q.get('fr'),ev.events.length-1)):ev.events.length-1;
+  ST.rounds=ev.events.slice(0,fr+1).map(_mkRound);   // slice → spark climbs, calendar/ledger at round fr
+  cur=ST.rounds.length-1;
+  const fs=ST.rounds[cur].score;                     // keep the comparison panel coherent with the replayed climb
+  if(ST.scores&&ST.scores.committed) Object.assign(ST.scores.committed,
+    {value:fs.value,continuity_breaks:fs.continuity_breaks,preference_mismatches:fs.preference_mismatches,patients_scheduled:fs.patients_scheduled});
+  view='schedule'; render();
+  const btn=$('#live'); if(btn){btn.textContent='◉ Replay (recorded Qwen)';btn.classList.add('on');} }
 async function act(m,p,b){ stop(); ST=await api(m,p,b); cur=ST.rounds.length-1; render();
   if(p.indexOf('/incident/')===0){ alarm();
     const a=(ST.alerts||[]).find(x=>x.level==='incident'); say('Incident. '+(a?a.msg:''));
@@ -229,7 +260,7 @@ function cmpBlock(){                                   // society vs single-agen
   }).join('');
   return `<div class="panel cmp">
      <h2>Society vs single agent — same week, same scorer</h2>
-     <div class="cmpgap"><b>${gap>0?'+':''}${gap}</b><span>the society's multi-objective advantage — from negotiation, not a bigger model. Both plans use the <b>same scorer</b>. ${ST.live?`Live: the single agent is one real <b>${esc(ST.baseline_model||'qwen3.7-plus')}</b> pass; the society is 5 advocates + a referee, all Qwen.`:`Offline (reproducible): the single agent is a deterministic acuity-first pass; live mode swaps in a real <b>qwen3.7-plus</b>.`}</span></div>
+     <div class="cmpgap"><b>${gap>0?'+':''}${gap}</b><span>the society's multi-objective advantage — from negotiation, not a bigger model. Both plans use the <b>same scorer</b>. The single agent is one Qwen pass; the society is 5 advocates + a referee negotiating, all Qwen.</span></div>
      <table class="cmptab"><thead><tr><th>Objective</th><th>Single agent</th><th>Society (5+1)</th></tr></thead><tbody>${body}</tbody></table>
    </div>`;
 }
@@ -240,8 +271,9 @@ function vSchedule(){
    <div class="panel">
      <h2>Negotiation — watch the society re-plan</h2>
      <div class="scrub">
-       <button onclick="step(-1)">◀</button><button class="primary" id="play" onclick="play()">▶ Play</button>
+       <button onclick="step(-1)">◀</button><button class="primary" id="play" onclick="replayDemo()" title="replay a recorded real Qwen negotiation — no tokens">▶ Replay</button>
        <button onclick="step(1)">▶</button>
+       <button id="live" class="livebtn" onclick="runLive()" title="run a fresh real Qwen negotiation — every panel updates live each round">◉ Run live (Qwen)</button>
        <input type="range" id="sl" min="0" max="${last}" value="${cur}" oninput="setR(+this.value)">
        <span class="status num" id="st"></span>
      </div>
@@ -288,7 +320,7 @@ function setR(i){ cur=i; const R=ST.rounds[i], last=ST.rounds.length-1, draft=R.
   $('#log').innerHTML=R.ledger.length?R.ledger.map(l=>`<li class="${fresh.has(l)?'fresh':''}">${esc(l)}</li>`).join('')
     :'<li class="muted">No rulings yet.</li>';
   $('#log').scrollTop=$('#log').scrollHeight;
-  $('#spark').innerHTML=spark(ST.rounds.map(r=>r.score.value), ST.scores.baseline.value);
+  $('#spark').innerHTML=spark(ST.rounds.slice(0,i+1).map(r=>r.score.value), ST.scores.baseline.value);   // climbs as rounds advance
   renderNego(R, UPTO);
   if(SOUND && timer && R.transcript){                 // announce rulings during playback only
     const dec=R.transcript.decision==='apply';
@@ -337,8 +369,37 @@ function card(c,moved){ const a=c.acuity>=7?'acu':'acu lo';
    <span>${c.mode}</span>${moved?'<span class="pin">↔</span>':''}${c.pref_ok?'':'<span class="warn">⚠</span>'}</div></div>`; }
 function step(d){ stop(); setR(Math.max(0,Math.min(ST.rounds.length-1,cur+d))); }
 function play(){ if(timer)return stop(); if(cur>=ST.rounds.length-1)setR(0); $('#play').textContent='⏸ Pause';
-  timer=setInterval(()=>{ if(cur>=ST.rounds.length-1)return stop(); setR(cur+1); },1000); }
-function stop(){ if(timer){clearInterval(timer);timer=null;} const p=$('#play'); if(p)p.textContent='▶ Play'; }
+  timer=setInterval(()=>{ if(cur>=ST.rounds.length-1)return stop(); setR(cur+1); },1200); }
+function stop(){ if(timer){clearInterval(timer);timer=null;} const p=$('#play'); if(p)p.textContent='▶ Replay'; }
+// ---- replay: load a RECORDED real Qwen negotiation and animate through it (no tokens) ----
+async function replayDemo(){
+  if(timer)return stop();                                    // toggle: pause if playing
+  if(liveES){liveES.close();liveES=null;}
+  if(!await loadReplay(true)) $('#st').innerHTML='<b>Replay:</b> no recording';  // reload from round 0 and animate
+}
+// ---- live: stream a REAL Qwen negotiation into the same panels, round by round ----
+let liveES=null;
+function _mkRound(d){ return {
+  round:d.round,
+  score:{value:d.value, continuity_breaks:d.continuity_breaks, preference_mismatches:d.preference_mismatches, patients_scheduled:d.scheduled},
+  cells:d.cells||[], transcript:d.transcript||null, ledger:d.ledger||[],
+  moved:(d.cells||[]).filter(c=>c.round===d.round).length, objections:{} }; }
+function runLive(){
+  stop(); if(liveES){liveES.close();liveES=null;}
+  const btn=$('#live'); btn.disabled=true; btn.textContent='◉ Live…'; btn.classList.add('on');
+  ST.rounds=[];                                   // stream a fresh negotiation in
+  liveES=new EventSource('/api/stream');
+  const endLive=lbl=>{ if(liveES){liveES.close();liveES=null;} btn.disabled=false; btn.textContent='◉ Run live (Qwen)'; btn.classList.remove('on'); if(lbl)$('#st').innerHTML=lbl; };
+  liveES.onmessage=e=>{ let d; try{d=JSON.parse(e.data);}catch(x){return;}
+    if(d.hello){ $('#st').innerHTML='<b>Live:</b> real Qwen agents negotiating…'; return; }
+    if(d.error){ endLive('<b>Live error:</b> '+esc(d.error)); return; }
+    if(d.done){ endLive(); return; }
+    ST.rounds.push(_mkRound(d));
+    const last=ST.rounds.length-1; const sl=$('#sl'); if(sl)sl.max=last;
+    setR(last);                                   // re-renders calendar + transcript + ledger + spark + KPIs
+  };
+  liveES.onerror=()=>endLive();
+}
 
 /* SVG sparkline */
 function spark(vals, base){ const W=440,H=150,pad=28; const lo=Math.min(base,...vals),hi=Math.max(base,...vals);

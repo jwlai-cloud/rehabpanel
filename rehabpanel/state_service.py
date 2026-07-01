@@ -22,12 +22,12 @@ INCIDENTS = ("sick", "cancel", "referral")
 
 # the agent roster shown in the UI (name, objective, model tier)
 _AGENTS = [
-    ("priority", "high-acuity seen", "qwen3.6-flash"),
-    ("window", "overdue follow-ups", "qwen3.6-flash"),
-    ("continuity", "stay with primary nurse", "qwen3.6-flash"),
-    ("capacity", "feasibility (veto)", "qwen3.6-flash"),
-    ("preference", "mode/availability", "qwen3.6-flash"),
-    ("referee", "arbitrate + log", "qwen3.7-max"),
+    ("priority", "high-acuity seen", "fast tier"),
+    ("window", "overdue follow-ups", "fast tier"),
+    ("continuity", "stay with primary nurse", "fast tier"),
+    ("capacity", "feasibility (veto)", "fast tier"),
+    ("preference", "mode/availability", "fast tier"),
+    ("referee", "arbitrate + log", "flagship tier"),
 ]
 _PROMPTS = Path(__file__).resolve().parent / "society" / "prompts"
 

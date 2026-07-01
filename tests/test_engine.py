@@ -135,8 +135,9 @@ def test_counter_win_is_attributed_to_the_counter_proposer():
     assert "seat P13" not in tr["ledger"]                       # not the losing original proposal
     stances = {t["agent"]: t["stance"] for t in tr["turns"]}
     assert stances["window"] == "counters"                      # window spoke as counter, not a redundant 'supports'
-    assert not any(t["agent"] == "window" and t["stance"] == "supports" for t in tr["turns"])
-    assert stances["continuity"] == "supports"                  # the genuine supporter still shows
+    assert not any(t["stance"] in ("supports", "opposes") for t in tr["turns"])  # coalition shown in arrays, not generic turns
+    assert "continuity" in tr["coalition_for"]                  # the genuine supporter is recorded in the FOR coalition
+    assert "preference" in tr["coalition_against"]
 
 
 def test_priority_weights_are_causal():
