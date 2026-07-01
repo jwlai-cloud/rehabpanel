@@ -326,15 +326,20 @@ class Advocate:
             return _OFFLINE_CRITIQUE[self.name](draft, context)
         objs = []
         try:
-            # System = SHARED caseload prefix (cached across all advocates + rounds)
-            # + this advocate's role. User = only the small, changing plan state.
-            # Ask for the TOP 3 objections, not an exhaustive list — tiny output = fast.
-            sysmsg = _caseload_ref(context) + "\n\n---\n" + self.system
+            # System content = a cacheable caseload block (identical across all
+            # advocates + rounds -> explicit context cache, guaranteed hit) + this
+            # advocate's role. User = only the small, changing plan state. Ask for the
+            # TOP 3 objections, not an exhaustive list — tiny output = fast + cheap.
+            sysblocks = [
+                {"type": "text", "text": _caseload_ref(context),
+                 "cache_control": {"type": "ephemeral"}},   # DashScope context cache marker
+                {"type": "text", "text": self.system},
+            ]
             usermsg = (_assignment_state(draft, context) +
                        '\n\nReturn ONLY your 3 most severe objections on YOUR objective as a JSON list, '
                        'most severe first: [{"patient_id":..,"slot_id":..,"severity":1-10,"reason":".."}]. '
                        "[] if none.")
-            msg = [{"role": "system", "content": sysmsg}, {"role": "user", "content": usermsg}]
+            msg = [{"role": "system", "content": sysblocks}, {"role": "user", "content": usermsg}]
             objs = [o for o in parse_json_list(chat(msg, model=ADVOCATE_MODEL)) if isinstance(o, dict)][:3]
         except Exception:
             objs = []  # never crash the graph on an LLM/transport error
