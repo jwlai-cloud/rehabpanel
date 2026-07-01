@@ -103,6 +103,9 @@
   .gbar > i{display:block;height:100%;background:var(--teal)}
   .gbar > i.hot{background:var(--red)}
   .muted{color:var(--muted)} .right{margin-left:auto}
+  .livelink{margin-left:auto;text-decoration:none;font-weight:700;font-size:14px;color:var(--teal-d);
+    border:1px solid var(--teal);border-radius:9px;padding:8px 13px;background:var(--teal-soft)}
+  .livelink:hover{background:var(--teal);color:#fff}
   svg .base{stroke:var(--slate);stroke-dasharray:4 3} svg .ln{stroke:var(--teal);fill:none;stroke-width:2.5}
   svg .dotp{fill:var(--teal)} svg text{fill:var(--muted);font-size:11px}
   /* negotiation transcript */
@@ -148,7 +151,8 @@
   <button class="danger" onclick="act('POST','/incident/sick')">🤒 Nurse sick</button>
   <button class="danger" onclick="act('POST','/incident/cancel')">✕ Patient cancels</button>
   <button class="danger" onclick="act('POST','/incident/referral')">＋ Urgent referral</button>
-  <button id="snd" class="right" onclick="toggleSound()" title="speak referee rulings + alert on incidents">🔇 Sound</button>
+  <a class="right livelink" href="/stream" title="watch a real-time Qwen negotiation stream">▶ Watch live</a>
+  <button id="snd" onclick="toggleSound()" title="speak referee rulings + alert on incidents">🔇 Sound</button>
   <button class="primary" onclick="act('POST','/replan')">⟳ Re-plan</button>
 </div>
 <div class="alerts" id="alerts"></div>
