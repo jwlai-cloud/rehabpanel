@@ -84,11 +84,13 @@ def _open_slots(ctx, draft):
     return [s for s in ctx["slots"] if s["slot_id"] not in used]
 
 
-# Scorer's default weights — used to scale advocate severity so the Rules view is
-# causal: a weight near 0 drops that objective below SEVERITY_EXIT (the referee
-# ignores it), a raised weight makes it outrank others. With no weights passed,
-# severities are unchanged (default behaviour).
-_DEFAULT_W = {"acuity": 10.0, "overdue": 1.0, "continuity": 4.0, "pref": 2.0}
+# Scale advocate severity so the Rules view is causal: a weight near 0 drops that
+# objective below SEVERITY_EXIT (the referee ignores it), a raised weight makes it
+# outrank others. The reference is the SCORER's own default weights, so the DEFAULT
+# config always leaves severities UNSCALED — otherwise re-weighting the scorer would
+# silently mute the advocates (halving continuity/pref once dropped them below exit).
+from ..scorer import DEFAULT_WEIGHTS as _SCORER_W
+_DEFAULT_W = {k: _SCORER_W[k] for k in ("acuity", "overdue", "continuity", "pref")}
 
 
 def _scale(ctx, key, base):

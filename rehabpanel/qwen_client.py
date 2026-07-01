@@ -36,11 +36,12 @@ def is_offline() -> bool:
 # Current DashScope tier (verify exact strings against the Model Studio model
 # list — preview ids can shift). Stable fallback aliases: qwen-max / qwen-plus /
 # qwen-flash. Distinct capabilities under a Qwen-only rule come from TIER:
-REFEREE_MODEL = "qwen3.7-max"    # flagship reasoning — arbitrates negotiations
-BASELINE_MODEL = "qwen3.7-plus"  # strong mid tier — the single-agent baseline is
-                                 # deliberately NOT the cheap flash model, so the
-                                 # society's win is architectural, not model-horsepower
-ADVOCATE_MODEL = "qwen3.6-flash" # cheap/fast tier — the 5 advocates (budget guard)
+# Env-overridable so we can point at whichever model still has free quota without
+# editing code (each Qwen model has its own free allotment).
+REFEREE_MODEL = os.environ.get("REHABPANEL_REFEREE_MODEL", "qwen3.7-max")    # flagship reasoning — arbitrates
+BASELINE_MODEL = os.environ.get("REHABPANEL_BASELINE_MODEL", "qwen3.7-plus") # strong mid tier — single-agent baseline
+                                 # (deliberately NOT the cheap flash tier, so the win is architectural)
+ADVOCATE_MODEL = os.environ.get("REHABPANEL_ADVOCATE_MODEL", "qwen3.5-flash")  # cheap/fast tier — the 5 advocates
 
 
 def chat(messages, model=ADVOCATE_MODEL, temperature=0.2, **kw):

@@ -22,12 +22,15 @@ from pathlib import Path
 
 DATA = Path(__file__).resolve().parent.parent / "data"
 
+# Weighting reflects a breadth-of-care priority: a rehab clinic's first duty is to
+# SEE its patients; a wrong-clinician or wrong-mode visit is a minor imperfection,
+# not a failure. Hence a strong per-patient-seen reward and light mismatch penalties.
 DEFAULT_WEIGHTS = {
     "acuity": 10.0,      # reward seeing high-acuity patients
-    "seen": 3.0,         # reward per patient scheduled — care delivered (see docstring)
+    "seen": 5.0,         # reward per patient scheduled — care delivered (breadth of care)
     "overdue": 1.0,      # penalty per patient-day overdue
-    "continuity": 4.0,   # penalty per primary-clinician break
-    "pref": 2.0,         # penalty per mode/availability mismatch
+    "continuity": 2.0,   # penalty per primary-clinician break (a tolerable imperfection)
+    "pref": 1.0,         # penalty per mode/availability mismatch (minor)
 }
 
 
