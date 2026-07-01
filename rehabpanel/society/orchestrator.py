@@ -403,6 +403,26 @@ def negotiate(tables, seed_draft=None, weights=None):
     return build_graph().invoke(init)
 
 
+def negotiate_stream(tables, seed_draft=None, weights=None):
+    """Same negotiation, but YIELDS each round's snapshot the instant its graph node
+    finishes — so a caller can render the debate in REAL TIME as the live LLM produces
+    it (the ~critique LLM calls happen between yields), instead of waiting for the whole
+    batch. Drives the SSE stream endpoint."""
+    init: SocietyState = {
+        "patients": tables.get("patients", []), "clinicians": tables.get("clinicians", []),
+        "slots": tables.get("slots", []), "meta": tables.get("meta", {}),
+        "weights": weights or {}, "seed_draft": seed_draft or [],
+        "draft": [], "objections": [], "nego": {}, "ledger": [], "snapshots": [],
+        "round": 0, "stalled": False,
+    }
+    for step in build_graph().stream(init):          # stream_mode=updates -> {node: delta}
+        for _node, delta in step.items():
+            if not isinstance(delta, dict):
+                continue
+            for snap in (delta.get("snapshots") or []):
+                yield snap                            # one completed round (draft / arbitrate)
+
+
 def run(seed=7):
     tables = {n: _load(n) for n in ("patients", "clinicians", "slots")}
     tables["meta"] = _load("meta")

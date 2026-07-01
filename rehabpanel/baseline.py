@@ -72,16 +72,21 @@ def plan(patients, clinicians, slots, weights=None):
     online = one Qwen pass, parsed + validated, re-prompted once if malformed."""
     if is_offline():
         return _greedy(patients, slots)
-    prompt = build_prompt(patients, clinicians, slots)
-    raw = chat([{"role": "user", "content": prompt}], model=BASELINE_MODEL)
-    assignments = validate(parse_assignments(raw), patients, slots)
-    if not assignments:  # re-prompt once, keeping the bad reply in history so the model can correct it
-        msgs = [{"role": "user", "content": prompt},
-                {"role": "assistant", "content": raw},
-                {"role": "user", "content": "That was not valid JSON. Reply with ONLY the JSON list "
-                                            "of {patient_id, slot_id, rationale}."}]
-        assignments = validate(parse_assignments(chat(msgs, model=BASELINE_MODEL)), patients, slots)
-    return assignments
+    assignments = None
+    try:
+        prompt = build_prompt(patients, clinicians, slots)
+        raw = chat([{"role": "user", "content": prompt}], model=BASELINE_MODEL)
+        assignments = validate(parse_assignments(raw), patients, slots)
+        if not assignments:  # re-prompt once, keeping the bad reply so the model can correct it
+            msgs = [{"role": "user", "content": prompt},
+                    {"role": "assistant", "content": raw},
+                    {"role": "user", "content": "That was not valid JSON. Reply with ONLY the JSON list "
+                                                "of {patient_id, slot_id, rationale}."}]
+            assignments = validate(parse_assignments(chat(msgs, model=BASELINE_MODEL)), patients, slots)
+    except Exception:
+        assignments = None  # a slow/failed big single-agent generation must not crash the app
+    # fall back to the deterministic greedy single agent — still a valid single-agent baseline
+    return assignments or _greedy(patients, slots)
 
 
 def run(seed=7):
