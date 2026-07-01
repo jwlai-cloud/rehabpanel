@@ -109,6 +109,7 @@
   .agent{cursor:pointer} .agent:hover{border-color:var(--teal)}
   .agent:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
   .rejnote{margin-top:8px;font-size:11.5px;color:var(--muted);font-style:italic}
+  .logic{margin:-4px 0 12px;font-size:12px;color:var(--muted);line-height:1.5}.logic b{color:var(--ink)}
   .prompt{white-space:pre-wrap;background:#0f2942;color:#e7eef5;border-radius:9px;padding:12px;
     font-size:11.5px;line-height:1.5;max-height:240px;overflow:auto;margin-top:10px;
     font-family:ui-monospace,Menlo,Consolas,monospace}
@@ -150,6 +151,8 @@ function init(){
   $('#nav').querySelectorAll('button').forEach(b=>b.onclick=()=>{view=b.dataset.v;location.hash=view;stop();render();});
   const h=location.hash.slice(1); if(VIEWS.some(v=>v[0]===h))view=h;   // deep-link to a view
   cur=ST.rounds.length-1;
+  const opp=ST.rounds.findIndex(r=>r.transcript&&(r.transcript.coalition_against||[]).length);
+  if(opp>=0)cur=opp;   // lead with a genuinely contested round (real disagreement) when one exists
   const rp=new URLSearchParams(location.search).get('r'); if(rp!==null)cur=Math.max(0,+rp);  // deep-link a round
   render();
 }
@@ -178,6 +181,7 @@ function vSchedule(){
    </div>
    <div class="panel">
      <h2>This round's negotiation — proposals · coalitions · ruling</h2>
+     <div class="logic">Each advocate objects on its one objective → the top objection's advocate proposes a swap → advocates split into <b>FOR</b> / <b>AGAINST</b> coalitions → the referee brokers on the priority ranking (capacity ≻ acuity ≻ overdue ≻ continuity ≻ preference).</div>
      <div id="nego"></div>
    </div>
    <div class="grid2">
