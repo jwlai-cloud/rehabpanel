@@ -196,9 +196,9 @@ The single most persuasive figure: sweep `demand_capacity_ratio` from 0.8 → 1.
 ## 9. Evolution — the coordinator app (post-MVP)
 
 The batch pipeline above (baseline vs society + benchmark) stays the reproducible
-core. On top of it we built a **coordinator app** so the society is *operated*,
-not just measured. Full spec: `docs/spec_coordinator_app.md`; architecture:
-`docs/architecture_app.svg`.
+core. On top of it, we built a **coordinator app** so the society is *operated*,
+not just measured. Full spec: `spec_coordinator_app.md`; architecture:
+`architecture_app.svg`.
 
 - **Framing.** The agent society **assists a nurse coordinator**: the coordinator
   sets roster, caseload and the priority rule; the society negotiates and shows
@@ -216,5 +216,5 @@ not just measured. Full spec: `docs/spec_coordinator_app.md`; architecture:
   weights go into the prompts.
 - **Stack.** FastAPI backend over an in-memory session behind a `Store` interface
   (a DB slots in later); a 5-view SPA (Caseload · Team · Rules ·
-  Schedule/Negotiation · KPIs). Deploy: `docs/deploy.md`.
+  Schedule/Negotiation · KPIs). Deploy: `deploy.md`.
 - **Scorer unchanged** — still pure-Python, external, and CI-locked.

@@ -241,8 +241,10 @@ def node_negotiate(state: SocietyState) -> dict:
     rejects one; stalls if none survive."""
     advocates = build_all()
     S = {s["slot_id"]: s for s in state["slots"]}
+    P = {p["patient_id"] for p in state["patients"]}
     hot = sorted((o for o in state["objections"] if o.get("severity", 0) >= SEVERITY_EXIT),
                  key=lambda o: -o.get("severity", 0))
+    rejected = []
     for top in hot:
         adv = advocates.get(top.get("by"))
         if not adv:
@@ -255,15 +257,17 @@ def node_negotiate(state: SocietyState) -> dict:
             continue  # never let a malformed LLM move crash the round
         move = swap["move"]
         pid, sid = move.get("patient_id"), move.get("slot_id")
-        if pid is None or sid not in S:
-            continue  # skip invalid/hallucinated moves
+        if pid not in P or sid not in S:
+            continue  # move must reference a real patient AND a real slot
         forc, against = _coalitions(move, state)
         decision = _decide(forc, against)              # referee brokers on the priority ranking
         tr = _transcript(top, swap, forc, against, _slot_label(S[sid]), decision)
         if decision:
+            tr["rejected"] = rejected                  # proposals the referee turned down first
             return {"nego": {"move": move, "transcript": tr, "line": tr["ledger"]}}
-        # referee rejected this one -> try the next objection
-    return {"nego": {"move": None}, "stalled": True}
+        rejected.append({"contested": tr["contested"], "role": tr["turns"][0]["role"],
+                         "line": tr["ledger"]})         # record the rejection, then try the next
+    return {"nego": {"move": None, "rejected": rejected}, "stalled": True}
 
 
 def node_arbitrate(state: SocietyState) -> dict:
