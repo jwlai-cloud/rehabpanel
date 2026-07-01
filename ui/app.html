@@ -99,6 +99,9 @@
   .bub .v{font-variant-numeric:tabular-nums;color:var(--muted)}
   .bub.ruling{background:var(--teal-soft);border-left-color:var(--teal);font-weight:600}
   .bub.opp{background:#fff7ef}
+  .bub.wf{animation:wf .32s ease both}
+  @keyframes wf{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  @media(prefers-reduced-motion:reduce){.bub.wf{animation:none}}
   .coal{display:flex;align-items:center;gap:10px;margin-top:12px;flex-wrap:wrap;font-size:12.5px}
   .coal .side{display:flex;align-items:center;gap:6px} .coal .side b{font-variant-numeric:tabular-nums}
   .coal .lbl{color:var(--muted);text-transform:uppercase;font-size:10.5px;letter-spacing:.06em;font-weight:700}
@@ -233,7 +236,7 @@ function setR(i){ cur=i; const R=ST.rounds[i], last=ST.rounds.length-1, draft=R.
     :'<li class="muted">No rulings yet.</li>';
   $('#log').scrollTop=$('#log').scrollHeight;
   $('#spark').innerHTML=spark(ST.rounds.map(r=>r.score.value), ST.scores.baseline.value);
-  renderNego(R);
+  renderNego(R, UPTO);
   if(SOUND && timer && R.transcript){                 // announce rulings during playback only
     const dec=R.transcript.decision==='apply';
     say('Round '+R.round+': '+(dec?'approved':'rejected')); dec?chime():buzz();
@@ -242,30 +245,32 @@ function setR(i){ cur=i; const R=ST.rounds[i], last=ST.rounds.length-1, draft=R.
 function objText(o){ const e=Object.entries(o||{}); return e.length?'['+e.map(([k,v])=>`${k}×${v}`).join(', ')+']':''; }
 const ACOLOR={priority:'#cc4b3e',window:'#b06d12',continuity:'#0b6e63',capacity:'#51657a',preference:'#9a4fb0',referee:'#2563a8'};
 const STANCE_IC={objects:'⚑',proposes:'✎',counters:'⇄',supports:'▲',opposes:'▼',ruling:'⚖'};
-function renderNego(R){
+const UPTO=(()=>{const u=new URLSearchParams(location.search).get('upto');return u==null?null:Math.max(0,+u);})();  // waterfall capture
+function renderNego(R, upto){
   const el=$('#nego'); if(!el) return;
   const tr=R.transcript;
   if(!tr){ el.innerHTML='<div class="muted">Acuity-first draft — negotiation begins next round. Press ▶ Play.</div>'; return; }
+  const turns = (upto!=null) ? tr.turns.slice(0, upto) : tr.turns;   // ?upto=K reveals turns one at a time
+  const full = (upto==null) || upto>=tr.turns.length;
   const dec=tr.decision==='apply';
   const chip=a=>`<span class="chip" style="border-color:${ACOLOR[a]||'#5a7287'};color:${ACOLOR[a]||'#5a7287'}">${a}</span>`;
-  const bubbles=tr.turns.map(t=>{
+  const bubbles=turns.map((t,i)=>{
     const c=ACOLOR[t.agent]||'#5a7287';
-    const cls='bub'+(t.stance==='ruling'?' ruling':(t.stance==='opposes'?' opp':''));
-    return `<div class="${cls}" style="border-left-color:${c}">
+    const cls='bub wf'+(t.stance==='ruling'?' ruling':(t.stance==='opposes'?' opp':''));
+    return `<div class="${cls}" style="border-left-color:${c};animation-delay:${(i*0.12).toFixed(2)}s">
       <span class="who" style="color:${c}">${STANCE_IC[t.stance]||'•'} ${esc(t.role)}</span>
       <span class="stance">${t.stance}</span><span class="txt">${esc(t.text)}</span>
       ${t.value?`<span class="v">${t.value>0?'+':''}${t.value}</span>`:''}</div>`;
   }).join('');
-  el.innerHTML=`<div class="contested">Contested slot: <b>${esc(tr.contested)}</b></div>
-    <div class="chat">${bubbles}</div>
-    <div class="coal">
+  const coal = full ? `<div class="coal">
       <div class="side"><span class="lbl">Coalition FOR</span>${tr.coalition_for.map(chip).join('')||'<span class="muted">—</span>'}<b>${tr.for_value}</b></div>
       <span class="vs">vs</span>
       <div class="side"><span class="lbl">AGAINST</span>${tr.coalition_against.map(chip).join('')||'<span class="muted">—</span>'}<b>${tr.against_value}</b></div>
       <span class="verdict ${dec?'ok':'no'}">${dec?'✓ AGREED':'✕ REJECTED'}</span>
-    </div>`+
-    ((tr.rejected&&tr.rejected.length)?`<div class="rejnote">Referee first rejected ${tr.rejected.length} proposal(s) this round: `+
-      tr.rejected.map(r=>esc(r.role+' @ '+r.contested)).join('; ')+`</div>`:'');
+    </div>`+((tr.rejected&&tr.rejected.length)?`<div class="rejnote">Referee first rejected ${tr.rejected.length} proposal(s) this round: `+
+      tr.rejected.map(r=>esc(r.role+' @ '+r.contested)).join('; ')+`</div>`:'') : '';
+  el.innerHTML=`<div class="contested">Contested slot: <b>${esc(tr.contested)}</b></div>
+    <div class="chat">${bubbles}</div>${coal}`;
 }
 function togglePrompt(i){ const el=$('#prompt'), a=ST.agents[i]; if(!el)return;
   if(el.style.display!=='none' && el.dataset.i==i){ el.style.display='none'; return; }
