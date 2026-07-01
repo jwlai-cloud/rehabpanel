@@ -15,7 +15,25 @@ docker run --rm -p 8000:8000 \
 ```
 `make docker-build` / `make docker-run` wrap these.
 
-## Alibaba Cloud (target)
+## Alibaba Cloud — recommended: Simple Application Server (SAS/SWAS)
+For an LLM-API-wrapper app like this (no GPU), **SAS is the ~5-minute path** and
+gives a running instance for the hackathon's proof-of-deployment screenshot:
+
+1. **Register** at alibabacloud.com (needs email + card; free tier covers this).
+2. **SAS console** → *Create Server* → Region **Singapore** → Image **Docker**
+   (Docker + Compose preinstalled) → smallest plan → pay → *Reset Password*.
+3. **Connect** (Workbench, in-browser) and run:
+   ```bash
+   git clone https://github.com/jwlai-cloud/rehabpanel.git && cd rehabpanel
+   docker build -t rehabpanel .
+   docker run -d --restart unless-stopped -p 80:8000 \
+     -e REHABPANEL_OFFLINE=0 -e DASHSCOPE_API_KEY=sk-... rehabpanel   # or omit both for the free offline demo
+   ```
+4. **Firewall** → open TCP **80**. Open `http://<public-ip>` → the app.
+5. **Proof screenshot:** SAS console → your instance / Workbench Overview showing
+   the **running** server. That's the required proof of Alibaba Cloud deployment.
+
+## Alibaba Cloud — ACR + serverless (alternative)
 Build → push to **Container Registry (ACR)** → run on a container host. Use the
 **Singapore** region to match the `dashscope-intl` endpoint.
 

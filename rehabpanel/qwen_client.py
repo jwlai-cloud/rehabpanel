@@ -42,8 +42,15 @@ ADVOCATE_MODEL = "qwen3.6-flash" # cheap/fast tier — the 5 advocates (budget g
 
 
 def chat(messages, model=ADVOCATE_MODEL, temperature=0.2, **kw):
-    """Thin wrapper. Returns the assistant message content (str)."""
+    """Thin wrapper. Returns the assistant message content (str).
+
+    Qwen3 models are reasoning models — their default 'thinking' output is large
+    and slow. The advocates only need short structured JSON, so we disable it
+    (enable_thinking=False) — ~10x fewer output tokens + faster, which matters for
+    both latency and the $40 voucher. Callers can override via extra_body."""
+    extra = {"enable_thinking": False}
+    extra.update(kw.pop("extra_body", None) or {})   # tolerate an explicit extra_body=None
     resp = client().chat.completions.create(
-        model=model, messages=messages, temperature=temperature, **kw
+        model=model, messages=messages, temperature=temperature, extra_body=extra, **kw
     )
     return resp.choices[0].message.content

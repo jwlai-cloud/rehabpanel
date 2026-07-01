@@ -36,9 +36,9 @@ Core + coordinator app are built and tested (`make test` = 30 tests, CI-locked).
 - `benchmark.py` — scarcity sweep → `results/gap.png`.
 - **Coordinator app:** `api.py` (FastAPI) + `state_service.py` (in-memory session
   behind a `Store` interface; incident → warm re-plan; causal rules) +
-  `ui/app.html` (5-view SPA). `make serve`.
-- `scripts/make_video.sh` (+ `scripts/tts.py`) — the ~3-min demo video
-  (CosyVoice if a key is set, else macOS `say`). `Dockerfile` + `docs/deploy.md`.
+  `ui/app.html` (5-view SPA). `make serve`. Container: `Dockerfile` + `docs/deploy.md`.
+- Demo video + render tooling are kept **local only** (not in the repo) — for
+  personal demo/practice.
 
 ## Models & orchestration
 - Model tiers live in `rehabpanel/qwen_client.py`. Current lineup: referee
@@ -63,7 +63,7 @@ The build is shipped. Source of truth: `docs/spec_coordinator_app.md` (the app)
 and `docs/RehabPanel_Design_Doc.md` (design + engine); `docs/BUILD_LOG.md` for history.
 
 - `make test` after anything scorer-adjacent · `make serve` to run the app ·
-  `make benchmark` to regenerate the headline gap · `make video` for the demo.
+  `make benchmark` to regenerate the headline gap.
 - Guardrails stay sacred: Qwen-only, and the scorer stays pure-Python + external
   + CI-locked. If the society ever fails to beat the baseline at ratio >= 1.2,
   the bug is in negotiation, not the scorer.

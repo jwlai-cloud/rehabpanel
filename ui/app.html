@@ -99,6 +99,9 @@
   .bub .v{font-variant-numeric:tabular-nums;color:var(--muted)}
   .bub.ruling{background:var(--teal-soft);border-left-color:var(--teal);font-weight:600}
   .bub.opp{background:#fff7ef}
+  .bub.wf{animation:wf .32s ease both}
+  @keyframes wf{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  @media(prefers-reduced-motion:reduce){.bub.wf{animation:none}}
   .coal{display:flex;align-items:center;gap:10px;margin-top:12px;flex-wrap:wrap;font-size:12.5px}
   .coal .side{display:flex;align-items:center;gap:6px} .coal .side b{font-variant-numeric:tabular-nums}
   .coal .lbl{color:var(--muted);text-transform:uppercase;font-size:10.5px;letter-spacing:.06em;font-weight:700}
@@ -109,6 +112,7 @@
   .agent{cursor:pointer} .agent:hover{border-color:var(--teal)}
   .agent:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
   .rejnote{margin-top:8px;font-size:11.5px;color:var(--muted);font-style:italic}
+  .logic{margin:-4px 0 12px;font-size:12px;color:var(--muted);line-height:1.5}.logic b{color:var(--ink)}
   .prompt{white-space:pre-wrap;background:#0f2942;color:#e7eef5;border-radius:9px;padding:12px;
     font-size:11.5px;line-height:1.5;max-height:240px;overflow:auto;margin-top:10px;
     font-family:ui-monospace,Menlo,Consolas,monospace}
@@ -128,7 +132,8 @@
   <button class="danger" onclick="act('POST','/incident/sick')">🤒 Nurse sick</button>
   <button class="danger" onclick="act('POST','/incident/cancel')">✕ Patient cancels</button>
   <button class="danger" onclick="act('POST','/incident/referral')">＋ Urgent referral</button>
-  <button class="primary right" onclick="act('POST','/replan')">⟳ Re-plan</button>
+  <button id="snd" class="right" onclick="toggleSound()" title="speak referee rulings + alert on incidents">🔇 Sound</button>
+  <button class="primary" onclick="act('POST','/replan')">⟳ Re-plan</button>
 </div>
 <div class="alerts" id="alerts"></div>
 <main id="main"></main>
@@ -138,11 +143,29 @@ const CLR=['#0b6e63','#2563a8','#9a4fb0','#b06d12','#3a7d44','#a33b5e']; let CMA
 const VIEWS=[['schedule','Schedule'],['caseload','Caseload'],['team','Team'],['rules','Rules'],['kpis','KPIs']];
 let ST=null, view='schedule', cur=0, timer=null;
 
+/* --- fun: the panel speaks the referee + alerts on incidents (browser-native,
+   free, no Qwen cost). Off by default; toggle with the 🔊 button. --- */
+let SOUND=false, AC=null;
+function toggleSound(){ SOUND=!SOUND; $('#snd').textContent=(SOUND?'🔊':'🔇')+' Sound';
+  if(SOUND){ try{ AC=AC||new (window.AudioContext||window.webkitAudioContext)(); if(AC.state==='suspended')AC.resume(); }catch(e){} say('Sound on'); }
+  else { try{ speechSynthesis.cancel(); }catch(e){} } }
+function say(t){ if(!SOUND||!t)return; try{ speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(t); u.rate=1.07; speechSynthesis.speak(u);}catch(e){} }
+function tone(freq,dur,vol,type){ if(!SOUND||!AC)return; try{ const o=AC.createOscillator(),g=AC.createGain();
+  o.type=type||'sine'; o.frequency.value=freq; o.connect(g); g.connect(AC.destination); const t=AC.currentTime;
+  g.gain.setValueAtTime(vol||0.15,t); g.gain.exponentialRampToValueAtTime(0.0001,t+dur); o.start(t); o.stop(t+dur+0.03);}catch(e){} }
+const chime=()=>{tone(880,0.18,0.14);setTimeout(()=>tone(1320,0.22,0.12),110);};            // approved
+const buzz =()=>tone(150,0.4,0.2,'square');                                                  // rejected
+const alarm=()=>{tone(500,0.16,0.24,'sawtooth');setTimeout(()=>tone(360,0.3,0.24,'sawtooth'),150);}; // incident / critical
+
 const api=(m,p,b)=>fetch('/api'+p,{method:m,headers:{'Content-Type':'application/json'},
   body:b?JSON.stringify(b):undefined}).then(r=>r.json());
 
 async function boot(){ ST=await fetch('/api/state').then(r=>r.json()); init(); }
-async function act(m,p,b){ stop(); ST=await api(m,p,b); cur=ST.rounds.length-1; render(); }
+async function act(m,p,b){ stop(); ST=await api(m,p,b); cur=ST.rounds.length-1; render();
+  if(p.indexOf('/incident/')===0){ alarm();
+    const a=(ST.alerts||[]).find(x=>x.level==='incident'); say('Incident. '+(a?a.msg:''));
+    if((ST.alerts||[]).some(x=>x.level==='critical')){ setTimeout(alarm,600); }   // anything wrong → alert loud
+  } else if(p==='/replan'){ const d=ST.disruption; say('Re-planned. '+(d?d.changed+' of '+d.total+' appointments changed.':'')); } }
 function init(){
   (ST.clinicians||[]).forEach((c,i)=>CMAP[c.id]=CLR[i%CLR.length]);
   $('#reset').onclick=()=>act('POST','/reset');
@@ -150,6 +173,8 @@ function init(){
   $('#nav').querySelectorAll('button').forEach(b=>b.onclick=()=>{view=b.dataset.v;location.hash=view;stop();render();});
   const h=location.hash.slice(1); if(VIEWS.some(v=>v[0]===h))view=h;   // deep-link to a view
   cur=ST.rounds.length-1;
+  const opp=ST.rounds.findIndex(r=>r.transcript&&(r.transcript.coalition_against||[]).length);
+  if(opp>=0)cur=opp;   // lead with a genuinely contested round (real disagreement) when one exists
   const rp=new URLSearchParams(location.search).get('r'); if(rp!==null)cur=Math.max(0,+rp);  // deep-link a round
   render();
 }
@@ -178,6 +203,7 @@ function vSchedule(){
    </div>
    <div class="panel">
      <h2>This round's negotiation — proposals · coalitions · ruling</h2>
+     <div class="logic">Each advocate objects on its one objective → the top objection's advocate proposes a swap → advocates split into <b>FOR</b> / <b>AGAINST</b> coalitions → the referee brokers on the priority ranking (capacity ≻ acuity ≻ overdue ≻ continuity ≻ preference).</div>
      <div id="nego"></div>
    </div>
    <div class="grid2">
@@ -196,6 +222,7 @@ function vSchedule(){
      </div>
    </div>`;
   setR(cur);
+  if(UPTO!=null){const p=$('#nego').closest('.panel');$('#main').replaceChildren(p);}  // waterfall capture: bubbles only, no spoiler ledger
 }
 function setR(i){ cur=i; const R=ST.rounds[i], last=ST.rounds.length-1, draft=R.round===0;
   $('#sl').value=i;
@@ -210,35 +237,42 @@ function setR(i){ cur=i; const R=ST.rounds[i], last=ST.rounds.length-1, draft=R.
     :'<li class="muted">No rulings yet.</li>';
   $('#log').scrollTop=$('#log').scrollHeight;
   $('#spark').innerHTML=spark(ST.rounds.map(r=>r.score.value), ST.scores.baseline.value);
-  renderNego(R);
+  renderNego(R, UPTO);
+  if(SOUND && timer && R.transcript){                 // announce rulings during playback only
+    const dec=R.transcript.decision==='apply';
+    say('Round '+R.round+': '+(dec?'approved':'rejected')); dec?chime():buzz();
+  }
 }
 function objText(o){ const e=Object.entries(o||{}); return e.length?'['+e.map(([k,v])=>`${k}×${v}`).join(', ')+']':''; }
 const ACOLOR={priority:'#cc4b3e',window:'#b06d12',continuity:'#0b6e63',capacity:'#51657a',preference:'#9a4fb0',referee:'#2563a8'};
-const STANCE_IC={objects:'⚑',proposes:'✎',supports:'▲',opposes:'▼',ruling:'⚖'};
-function renderNego(R){
+const STANCE_IC={objects:'⚑',proposes:'✎',counters:'⇄',supports:'▲',opposes:'▼',ruling:'⚖'};
+const UPTO=(()=>{const u=new URLSearchParams(location.search).get('upto');if(u==null)return null;const n=+u;return Number.isFinite(n)?Math.max(0,Math.floor(n)):null;})();  // waterfall capture (null on garbage)
+function renderNego(R, upto){
   const el=$('#nego'); if(!el) return;
   const tr=R.transcript;
   if(!tr){ el.innerHTML='<div class="muted">Acuity-first draft — negotiation begins next round. Press ▶ Play.</div>'; return; }
+  const turns = (upto!=null) ? tr.turns.slice(0, upto) : tr.turns;   // ?upto=K reveals turns one at a time
+  const full = (upto==null) || upto>=tr.turns.length;
   const dec=tr.decision==='apply';
-  const chip=a=>`<span class="chip" style="border-color:${ACOLOR[a]||'#5a7287'};color:${ACOLOR[a]||'#5a7287'}">${a}</span>`;
-  const bubbles=tr.turns.map(t=>{
+  const chip=a=>`<span class="chip" style="border-color:${ACOLOR[a]||'#5a7287'};color:${ACOLOR[a]||'#5a7287'}">${esc(a)}</span>`;
+  const bubbles=turns.map((t,i)=>{
     const c=ACOLOR[t.agent]||'#5a7287';
-    const cls='bub'+(t.stance==='ruling'?' ruling':(t.stance==='opposes'?' opp':''));
-    return `<div class="${cls}" style="border-left-color:${c}">
+    const cls='bub wf'+(t.stance==='ruling'?' ruling':(t.stance==='opposes'?' opp':''));
+    const v=Number(t.value);   // agent JSON may carry a non-numeric value
+    return `<div class="${cls}" style="border-left-color:${c};animation-delay:${(i*0.12).toFixed(2)}s">
       <span class="who" style="color:${c}">${STANCE_IC[t.stance]||'•'} ${esc(t.role)}</span>
-      <span class="stance">${t.stance}</span><span class="txt">${esc(t.text)}</span>
-      ${t.value?`<span class="v">${t.value>0?'+':''}${t.value}</span>`:''}</div>`;
+      <span class="stance">${esc(t.stance)}</span><span class="txt">${esc(t.text)}</span>
+      ${Number.isFinite(v)&&v!==0?`<span class="v">${v>0?'+':''}${v}</span>`:''}</div>`;
   }).join('');
-  el.innerHTML=`<div class="contested">Contested slot: <b>${esc(tr.contested)}</b></div>
-    <div class="chat">${bubbles}</div>
-    <div class="coal">
+  const coal = full ? `<div class="coal">
       <div class="side"><span class="lbl">Coalition FOR</span>${tr.coalition_for.map(chip).join('')||'<span class="muted">—</span>'}<b>${tr.for_value}</b></div>
       <span class="vs">vs</span>
       <div class="side"><span class="lbl">AGAINST</span>${tr.coalition_against.map(chip).join('')||'<span class="muted">—</span>'}<b>${tr.against_value}</b></div>
       <span class="verdict ${dec?'ok':'no'}">${dec?'✓ AGREED':'✕ REJECTED'}</span>
-    </div>`+
-    ((tr.rejected&&tr.rejected.length)?`<div class="rejnote">Referee first rejected ${tr.rejected.length} proposal(s) this round: `+
-      tr.rejected.map(r=>esc(r.role+' @ '+r.contested)).join('; ')+`</div>`:'');
+    </div>`+((tr.rejected&&tr.rejected.length)?`<div class="rejnote">Referee first rejected ${tr.rejected.length} proposal(s) this round: `+
+      tr.rejected.map(r=>esc(r.role+' @ '+r.contested)).join('; ')+`</div>`:'') : '';
+  el.innerHTML=`<div class="contested">Contested slot: <b>${esc(tr.contested)}</b></div>
+    <div class="chat">${bubbles}</div>${coal}`;
 }
 function togglePrompt(i){ const el=$('#prompt'), a=ST.agents[i]; if(!el)return;
   if(el.style.display!=='none' && el.dataset.i==i){ el.style.display='none'; return; }

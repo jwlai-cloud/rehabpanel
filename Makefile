@@ -1,4 +1,4 @@
-.PHONY: data baseline society benchmark video serve docker-build docker-run test
+.PHONY: data baseline society benchmark serve docker-build docker-run test
 SEED ?= 7
 RATIO ?= 1.3
 
@@ -16,9 +16,6 @@ benchmark:   ## baseline vs society across seeds + scarcity sweep
 
 test:        ## lock the objective function
 	pytest -q
-
-video:       ## render the demo video -> results/demo.mp4 (macOS: say + ffmpeg + Chrome)
-	bash scripts/make_video.sh
 
 serve:       ## run the coordinator app backend (http://localhost:8000)
 	uvicorn rehabpanel.api:app --reload --port 8000
