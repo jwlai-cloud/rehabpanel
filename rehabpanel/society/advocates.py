@@ -326,9 +326,16 @@ class Advocate:
             return _OFFLINE_CRITIQUE[self.name](draft, context)
         objs = []
         try:
-            msg = [{"role": "system", "content": self.system},
-                   {"role": "user", "content": _render_draft(draft, context)}]
-            objs = [o for o in parse_json_list(chat(msg, model=ADVOCATE_MODEL)) if isinstance(o, dict)]
+            # System = SHARED caseload prefix (cached across all advocates + rounds)
+            # + this advocate's role. User = only the small, changing plan state.
+            # Ask for the TOP 3 objections, not an exhaustive list — tiny output = fast.
+            sysmsg = _caseload_ref(context) + "\n\n---\n" + self.system
+            usermsg = (_assignment_state(draft, context) +
+                       '\n\nReturn ONLY your 3 most severe objections on YOUR objective as a JSON list, '
+                       'most severe first: [{"patient_id":..,"slot_id":..,"severity":1-10,"reason":".."}]. '
+                       "[] if none.")
+            msg = [{"role": "system", "content": sysmsg}, {"role": "user", "content": usermsg}]
+            objs = [o for o in parse_json_list(chat(msg, model=ADVOCATE_MODEL)) if isinstance(o, dict)][:3]
         except Exception:
             objs = []  # never crash the graph on an LLM/transport error
         # Live LLM output is flaky (empty / unparseable) -> the society would raise
@@ -338,31 +345,13 @@ class Advocate:
 
     # -- propose_swap ---------------------------------------------------------
     def propose_swap(self, objection, state):
-        """A swap + the marginal value the advocate places on the trade."""
+        """A concrete swap addressing the objection — DETERMINISTIC in both modes.
+        The advocates' real LLM reasoning lives in critique(); the mechanical swap
+        (which feasible slot to move to) needs no extra LLM round-trip, so live runs
+        stay fast/cheap: the only live calls are the short, cached-prefix critiques."""
         ctx = {k: state[k] for k in ("patients", "clinicians", "slots") if k in state}
         ctx["meta"] = state.get("meta")
-        draft = state["draft"]
-        if is_offline():
-            return self._offline_swap(objection, ctx, draft)
-        obj = None
-        try:
-            payload = {"objection": objection, "draft": draft}
-            msg = [{"role": "system", "content": self.system},
-                   {"role": "user",
-                    "content": "Propose ONE swap to address this objection. Return ONLY JSON "
-                               '{"move":{"patient_id":..,"slot_id":..},"marginal_value":<num>,"reason":..}.\n'
-                               + json.dumps(payload)}]
-            obj = parse_json_obj(chat(msg, model=ADVOCATE_MODEL))
-        except Exception:
-            obj = None
-        # accept the LLM swap only if the move references a real patient + slot;
-        # otherwise fall back to the deterministic swap so the round isn't wasted.
-        if isinstance(obj, dict) and isinstance(obj.get("move"), dict):
-            m, pids = obj["move"], {p["patient_id"] for p in ctx["patients"]}
-            sids = {s["slot_id"] for s in ctx["slots"]}
-            if m.get("patient_id") in pids and m.get("slot_id") in sids:
-                return obj
-        return self._offline_swap(objection, ctx, draft)
+        return self._offline_swap(objection, ctx, state["draft"])
 
     def _offline_swap(self, objection, ctx, draft):
         if self.name == "continuity":
@@ -372,6 +361,27 @@ class Advocate:
         if self.name in ("priority", "window"):
             return _swap_seat(objection, ctx, draft, self.name)
         return None  # capacity does not trade
+
+
+def _caseload_ref(context):
+    """The invariant caseload as a compact table. IDENTICAL on every call and every
+    round, so it forms a cacheable prompt PREFIX — Qwen auto prefix-caching bills the
+    big context once and re-prefills it near-instantly, instead of re-sending it per
+    advocate per round (the token/latency waste)."""
+    P, S = context["patients"], context["slots"]
+    pl = "\n".join(f"{p['patient_id']} acu{p['acuity_score']} prim:{p['primary_clinician_id']} "
+                   f"pref:{p['preferred_mode']} due:{p['followup_due_date']}" for p in P)
+    sl = "\n".join(f"{s['slot_id']} {s['clinician_id']} {s['mode']} {s['date']}" for s in S)
+    return f"CASELOAD (fixed reference)\n# patients: id acuity primary pref due\n{pl}\n\n# slots: id clinician mode date\n{sl}"
+
+
+def _assignment_state(draft, context):
+    """The VARIABLE part — just the current patient->slot map + who's unscheduled.
+    Small, so only this changes between calls; the caseload prefix stays cached."""
+    seated = ", ".join(f"{a['patient_id']}->{a['slot_id']}" for a in draft)
+    seen = _assigned_map(draft)
+    unseen = [p["patient_id"] for p in context["patients"] if p["patient_id"] not in seen]
+    return f"CURRENT PLAN: {seated}\nUNSCHEDULED: {', '.join(unseen) or 'none'}"
 
 
 def _render_draft(draft, context):

@@ -17,6 +17,8 @@ def client() -> OpenAI:
         _CLIENT = OpenAI(
             api_key=os.environ["DASHSCOPE_API_KEY"],
             base_url="https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+            timeout=float(os.environ.get("REHABPANEL_LLM_TIMEOUT", "60")),  # never hang; big single-agent gen needs headroom
+            max_retries=1,
         )
     return _CLIENT
 

@@ -15,6 +15,7 @@ Graph:
                          |________________|  no  -> END
 """
 import argparse, json, os
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from pathlib import Path
 from typing import TypedDict, Annotated
@@ -27,7 +28,10 @@ from ..qwen_client import chat, is_offline, REFEREE_MODEL
 
 DATA = Path(__file__).resolve().parent.parent.parent / "data"
 PROMPTS = Path(__file__).resolve().parent / "prompts"
-ROUND_CAP = 6        # online default — caps referee LLM calls (token budget)
+ROUND_CAP = 10       # online default — enough rounds for the society to clear the
+                     # single-agent score with margin (~+196 vs ~+183 at seed 7),
+                     # while staying cheap: critique runs in parallel, so ~10 rounds
+                     # is ~40s of qwen3.5-flash calls. Override with REHABPANEL_ROUND_CAP.
 SEVERITY_EXIT = 3   # preference objections are severity 3 — include them so the
                     # society also optimizes preference (a swap that would worsen a
                     # higher-ranked objective is still rejected by the referee)
@@ -136,17 +140,24 @@ def node_draft(state: SocietyState) -> dict:
 
 
 def node_critique(state: SocietyState) -> dict:
-    """Each advocate files objections (1-10 severity) against the current draft."""
+    """Each advocate files objections (1-10 severity) against the current draft.
+    The five advocates run CONCURRENTLY — offline it's free; live it collapses five
+    sequential Qwen calls into one round-trip, the main lever that makes a real-LLM
+    negotiation fast enough to watch."""
     advocates = build_all()
     ctx = {k: state[k] for k in ("patients", "clinicians", "slots")}
     ctx["meta"] = state.get("meta")
     ctx["weights"] = state.get("weights") or {}
-    objections = []
-    for name, adv in advocates.items():
+
+    def _one(item):
+        name, adv = item
         try:
-            objections += [{**o, "by": name} for o in adv.critique(state["draft"], ctx)]
+            return [{**o, "by": name} for o in adv.critique(state["draft"], ctx)]
         except Exception:
-            pass  # an advocate must never crash the negotiation
+            return []  # an advocate must never crash the negotiation
+
+    with ThreadPoolExecutor(max_workers=len(advocates)) as ex:
+        objections = [o for group in ex.map(_one, advocates.items()) for o in group]
     return {"objections": objections}
 
 

@@ -48,13 +48,24 @@ def test_critique_online_transport_error_returns_empty(monkeypatch):
     assert A.Advocate("continuity").critique(DRAFT, CTX) == []
 
 
-def test_propose_swap_online_parses(monkeypatch):
+def test_propose_swap_online_is_deterministic(monkeypatch):
+    """propose_swap no longer calls the LLM (the real reasoning is in critique) — it
+    returns a feasible deterministic swap and IGNORES any model output."""
     monkeypatch.setattr(A, "is_offline", lambda: False)
-    monkeypatch.setattr(A, "chat",
-                        lambda *a, **k: '{"move":{"patient_id":"P0","slot_id":"S0"},"marginal_value":4,"reason":"r"}')
-    state = {**CTX, "draft": DRAFT}
+    monkeypatch.setattr(A, "chat", lambda *a, **k: "garbage — must be ignored")
+    ctx = {
+        "patients": [{"patient_id": "P0", "acuity_score": 9, "followup_due_date": "2026-06-04",
+                      "primary_clinician_id": "C01", "preferred_mode": "clinic"}],
+        "slots": [{"slot_id": "S0", "clinician_id": "C00", "date": "2026-06-09", "mode": "clinic"},
+                  {"slot_id": "S1", "clinician_id": "C01", "date": "2026-06-09", "mode": "clinic"}],
+        "clinicians": [{"clinician_id": "C00", "weekly_capacity_slots": 2, "max_home_visits_per_day": 1},
+                       {"clinician_id": "C01", "weekly_capacity_slots": 2, "max_home_visits_per_day": 1}],
+        "meta": {"t0": "2026-06-08"},
+    }
+    # P0 (primary C01) sits in S0 (C00) -> continuity break; S1 (C01) is open
+    state = {**ctx, "draft": [{"patient_id": "P0", "slot_id": "S0"}]}
     swap = A.Advocate("continuity").propose_swap({"patient_id": "P0", "slot_id": "S0"}, state)
-    assert swap["move"] == {"patient_id": "P0", "slot_id": "S0"}
+    assert swap["move"] == {"patient_id": "P0", "slot_id": "S1"}   # -> primary's open slot, deterministically
 
 
 def test_propose_swap_online_bad_output_returns_none(monkeypatch):
