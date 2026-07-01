@@ -101,6 +101,23 @@ def test_incident_replan_surfaces_opposition():
     assert against, "no opposing coalition surfaced on incident re-plan"
 
 
+def test_bargaining_produces_counter_proposals():
+    """With REHABPANEL_BARGAIN=1, a contested re-plan round yields a counter-turn
+    (the opposer's alternative) — a genuine multi-turn exchange. Off by default."""
+    os.environ["REHABPANEL_BARGAIN"] = "1"
+    try:
+        t = _tables()
+        plan0 = O.negotiate(t)["draft"]
+        t2 = dict(t)
+        t2["slots"] = [s for s in t["slots"] if s["clinician_id"] != "C00"]
+        final = O.negotiate(t2, seed_draft=plan0)
+        counters = [tr for s in final["snapshots"] if (tr := s.get("transcript"))
+                    and any(x["stance"] == "counters" for x in tr["turns"])]
+        assert counters, "bargaining produced no counter-proposals"
+    finally:
+        os.environ.pop("REHABPANEL_BARGAIN", None)
+
+
 def test_priority_weights_are_causal():
     t = _tables()
     P, C, S, M = t["patients"], t["clinicians"], t["slots"], t["meta"]

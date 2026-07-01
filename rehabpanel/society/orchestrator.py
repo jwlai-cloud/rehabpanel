@@ -200,9 +200,44 @@ def _decide(forc, against):
     return fr > 0 and fr >= ar
 
 
-def _transcript(top, swap, forc, against, label, decision):
-    """Structured negotiation exchange for one contested resource — drives the UI
-    chat and the ledger line."""
+def _margin(forc, against):
+    """Signed priority margin (top FOR rank − top AGAINST rank); very negative on a
+    capacity veto or no FOR. Used to choose between competing proposals."""
+    if any(a["agent"] == "capacity" for a in against):
+        return -999
+    fr = max((_RANK.get(f["agent"], 0) for f in forc), default=0)
+    ar = max((_RANK.get(a["agent"], 0) for a in against), default=0)
+    return (fr - ar) if fr > 0 else -999
+
+
+def _bargain_enabled():
+    return os.environ.get("REHABPANEL_BARGAIN") == "1"
+
+
+def _propose(objection, adv, state, S, P):
+    """Ask an advocate for a feasible swap addressing an objection; None if invalid."""
+    try:
+        swap = adv.propose_swap(objection, state)
+    except Exception:
+        return None
+    if not swap or not isinstance(swap.get("move"), dict):
+        return None
+    m = swap["move"]
+    if m.get("patient_id") not in P or m.get("slot_id") not in S:
+        return None
+    return swap
+
+
+def _top_obj(agent, state):
+    objs = [o for o in state["objections"]
+            if o.get("by") == agent and o.get("severity", 0) >= SEVERITY_EXIT]
+    return max(objs, key=lambda o: o.get("severity", 0)) if objs else None
+
+
+def _transcript(top, swap, forc, against, label, decision, counter=None, chosen="proposal"):
+    """Structured negotiation exchange — drives the UI chat + ledger line. With a
+    `counter` (bargaining mode), it records the opposer's counter-proposal and which
+    side the referee chose."""
     by = top.get("by")
     turns = [
         {"agent": by, "role": _ROLE.get(by, by), "stance": "objects",
@@ -210,6 +245,10 @@ def _transcript(top, swap, forc, against, label, decision):
         {"agent": by, "role": _ROLE.get(by, by), "stance": "proposes",
          "text": swap.get("reason", ""), "value": swap.get("marginal_value", 0)},
     ]
+    if counter:
+        ca = counter["agent"]
+        turns.append({"agent": ca, "role": _ROLE.get(ca, ca), "stance": "counters",
+                      "text": counter.get("reason", ""), "value": counter.get("marginal_value", 0)})
     for f in forc:
         if f["agent"] == by:
             continue
@@ -220,12 +259,15 @@ def _transcript(top, swap, forc, against, label, decision):
                       "stance": "opposes", "text": "objective worsens", "value": a["value"]})
     for_v = sum(f["value"] for f in forc)
     ag_v = sum(a["value"] for a in against)
-    verb = "approves" if decision else "rejects"
+    if not decision:
+        rule = "rejects — no proposal outranks the opposition"
+    elif counter:
+        rule = f"chose the {chosen} — FOR ({for_v}) vs AGAINST ({ag_v})"
+    else:
+        rule = f"approves — coalition FOR ({for_v}) vs AGAINST ({ag_v})"
     turns.append({"agent": "referee", "role": _ROLE["referee"], "stance": "ruling",
-                  "text": f"{verb} — coalition FOR ({for_v}) vs AGAINST ({ag_v}) at current weights",
-                  "value": for_v - ag_v})
-    line = (f"{label} — {_ROLE.get(by, by)}: {swap.get('reason', '')}. "
-            f"Referee {verb} (FOR {for_v} vs AGAINST {ag_v}).")
+                  "text": rule + " at current weights", "value": for_v - ag_v})
+    line = f"{label} — {_ROLE.get(by, by)}: {swap.get('reason', '')}. Referee {rule}."
     return {"contested": label, "turns": turns,
             "coalition_for": [f["agent"] for f in forc], "for_value": for_v,
             "coalition_against": [a["agent"] for a in against], "against_value": ag_v,
@@ -233,12 +275,12 @@ def _transcript(top, swap, forc, against, label, decision):
 
 
 def node_negotiate(state: SocietyState) -> dict:
-    """Draft -> Critique -> NEGOTIATE -> Arbitrate. For the highest-severity
-    actionable objection the relevant advocate proposes a swap; a deterministic
-    impact model forms FOR/AGAINST coalitions; the referee brokers (approve iff
-    the FOR coalition outweighs AGAINST and is net-positive). Records the chosen
-    move + the full exchange transcript; tries the next objection when the referee
-    rejects one; stalls if none survive."""
+    """Draft -> Critique -> NEGOTIATE -> Arbitrate. The relevant advocate proposes a
+    swap; a deterministic impact model forms FOR/AGAINST coalitions; the referee
+    brokers on the priority ranking. With REHABPANEL_BARGAIN=1, when a proposal draws
+    opposition the top opposing advocate makes a COUNTER-proposal and the referee
+    chooses between them — a genuine multi-turn exchange. Records the chosen move +
+    transcript; tries the next objection on rejection; stalls if none survive."""
     advocates = build_all()
     S = {s["slot_id"]: s for s in state["slots"]}
     P = {p["patient_id"] for p in state["patients"]}
@@ -249,24 +291,36 @@ def node_negotiate(state: SocietyState) -> dict:
         adv = advocates.get(top.get("by"))
         if not adv:
             continue
-        try:
-            swap = adv.propose_swap(top, state)
-        except Exception:
-            swap = None
-        if not swap or not isinstance(swap.get("move"), dict):
-            continue  # never let a malformed LLM move crash the round
-        move = swap["move"]
-        pid, sid = move.get("patient_id"), move.get("slot_id")
-        if pid not in P or sid not in S:
-            continue  # move must reference a real patient AND a real slot
-        forc, against = _coalitions(move, state)
-        decision = _decide(forc, against)              # referee brokers on the priority ranking
-        tr = _transcript(top, swap, forc, against, _slot_label(S[sid]), decision)
-        if decision:
-            tr["rejected"] = rejected                  # proposals the referee turned down first
-            return {"nego": {"move": move, "transcript": tr, "line": tr["ledger"]}}
+        swap = _propose(top, adv, state, S, P)
+        if not swap:
+            continue
+        forc, against = _coalitions(swap["move"], state)
+        counter = counter_swap = c_forc = c_against = None
+        if _bargain_enabled() and against:                 # multi-turn: let the opposer counter
+            opp = max(against, key=lambda a: _RANK.get(a["agent"], 0))["agent"]
+            oo, oa = _top_obj(opp, state), advocates.get(opp)
+            counter_swap = _propose(oo, oa, state, S, P) if (oo and oa) else None
+            if counter_swap:                               # a concrete alternative move
+                counter = {"agent": opp, **counter_swap}
+                c_forc, c_against = _coalitions(counter_swap["move"], state)
+            else:                                          # else the opposer defends the status quo
+                oppval = next((a["value"] for a in against if a["agent"] == opp), 0)
+                counter = {"agent": opp, "reason": "hold — keep the current assignment",
+                           "marginal_value": oppval}
+        opts = [("proposal", swap["move"], forc, against)]
+        if counter_swap:
+            opts.append(("counter", counter_swap["move"], c_forc, c_against))
+        viable = [o for o in opts if _decide(o[2], o[3])]
+        chosen = max(viable, key=lambda o: _margin(o[2], o[3])) if viable else None
+        label = _slot_label(S[swap["move"]["slot_id"]])
+        if chosen:
+            _, move_, f_, a_ = chosen
+            tr = _transcript(top, swap, f_, a_, label, True, counter=counter, chosen=chosen[0])
+            tr["rejected"] = rejected
+            return {"nego": {"move": move_, "transcript": tr, "line": tr["ledger"]}}
+        tr = _transcript(top, swap, forc, against, label, False, counter=counter)
         rejected.append({"contested": tr["contested"], "role": tr["turns"][0]["role"],
-                         "line": tr["ledger"]})         # record the rejection, then try the next
+                         "line": tr["ledger"]})
     return {"nego": {"move": None, "rejected": rejected}, "stalled": True}
 
 

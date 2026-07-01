@@ -218,7 +218,7 @@ function setR(i){ cur=i; const R=ST.rounds[i], last=ST.rounds.length-1, draft=R.
 }
 function objText(o){ const e=Object.entries(o||{}); return e.length?'['+e.map(([k,v])=>`${k}×${v}`).join(', ')+']':''; }
 const ACOLOR={priority:'#cc4b3e',window:'#b06d12',continuity:'#0b6e63',capacity:'#51657a',preference:'#9a4fb0',referee:'#2563a8'};
-const STANCE_IC={objects:'⚑',proposes:'✎',supports:'▲',opposes:'▼',ruling:'⚖'};
+const STANCE_IC={objects:'⚑',proposes:'✎',counters:'⇄',supports:'▲',opposes:'▼',ruling:'⚖'};
 function renderNego(R){
   const el=$('#nego'); if(!el) return;
   const tr=R.transcript;
