@@ -129,7 +129,8 @@
   <button class="danger" onclick="act('POST','/incident/sick')">🤒 Nurse sick</button>
   <button class="danger" onclick="act('POST','/incident/cancel')">✕ Patient cancels</button>
   <button class="danger" onclick="act('POST','/incident/referral')">＋ Urgent referral</button>
-  <button class="primary right" onclick="act('POST','/replan')">⟳ Re-plan</button>
+  <button id="snd" class="right" onclick="toggleSound()" title="speak referee rulings + alert on incidents">🔇 Sound</button>
+  <button class="primary" onclick="act('POST','/replan')">⟳ Re-plan</button>
 </div>
 <div class="alerts" id="alerts"></div>
 <main id="main"></main>
@@ -139,11 +140,29 @@ const CLR=['#0b6e63','#2563a8','#9a4fb0','#b06d12','#3a7d44','#a33b5e']; let CMA
 const VIEWS=[['schedule','Schedule'],['caseload','Caseload'],['team','Team'],['rules','Rules'],['kpis','KPIs']];
 let ST=null, view='schedule', cur=0, timer=null;
 
+/* --- fun: the panel speaks the referee + alerts on incidents (browser-native,
+   free, no Qwen cost). Off by default; toggle with the 🔊 button. --- */
+let SOUND=false, AC=null;
+function toggleSound(){ SOUND=!SOUND; $('#snd').textContent=(SOUND?'🔊':'🔇')+' Sound';
+  if(SOUND){ try{ AC=AC||new (window.AudioContext||window.webkitAudioContext)(); if(AC.state==='suspended')AC.resume(); }catch(e){} say('Sound on'); }
+  else { try{ speechSynthesis.cancel(); }catch(e){} } }
+function say(t){ if(!SOUND||!t)return; try{ speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(t); u.rate=1.07; speechSynthesis.speak(u);}catch(e){} }
+function tone(freq,dur,vol,type){ if(!SOUND||!AC)return; try{ const o=AC.createOscillator(),g=AC.createGain();
+  o.type=type||'sine'; o.frequency.value=freq; o.connect(g); g.connect(AC.destination); const t=AC.currentTime;
+  g.gain.setValueAtTime(vol||0.15,t); g.gain.exponentialRampToValueAtTime(0.0001,t+dur); o.start(t); o.stop(t+dur+0.03);}catch(e){} }
+const chime=()=>{tone(880,0.18,0.14);setTimeout(()=>tone(1320,0.22,0.12),110);};            // approved
+const buzz =()=>tone(150,0.4,0.2,'square');                                                  // rejected
+const alarm=()=>{tone(500,0.16,0.24,'sawtooth');setTimeout(()=>tone(360,0.3,0.24,'sawtooth'),150);}; // incident / critical
+
 const api=(m,p,b)=>fetch('/api'+p,{method:m,headers:{'Content-Type':'application/json'},
   body:b?JSON.stringify(b):undefined}).then(r=>r.json());
 
 async function boot(){ ST=await fetch('/api/state').then(r=>r.json()); init(); }
-async function act(m,p,b){ stop(); ST=await api(m,p,b); cur=ST.rounds.length-1; render(); }
+async function act(m,p,b){ stop(); ST=await api(m,p,b); cur=ST.rounds.length-1; render();
+  if(p.indexOf('/incident/')===0){ alarm();
+    const a=(ST.alerts||[]).find(x=>x.level==='incident'); say('Incident. '+(a?a.msg:''));
+    if((ST.alerts||[]).some(x=>x.level==='critical')){ setTimeout(alarm,600); }   // anything wrong → alert loud
+  } else if(p==='/replan'){ const d=ST.disruption; say('Re-planned. '+(d?d.changed+' of '+d.total+' appointments changed.':'')); } }
 function init(){
   (ST.clinicians||[]).forEach((c,i)=>CMAP[c.id]=CLR[i%CLR.length]);
   $('#reset').onclick=()=>act('POST','/reset');
@@ -215,6 +234,10 @@ function setR(i){ cur=i; const R=ST.rounds[i], last=ST.rounds.length-1, draft=R.
   $('#log').scrollTop=$('#log').scrollHeight;
   $('#spark').innerHTML=spark(ST.rounds.map(r=>r.score.value), ST.scores.baseline.value);
   renderNego(R);
+  if(SOUND && timer && R.transcript){                 // announce rulings during playback only
+    const dec=R.transcript.decision==='apply';
+    say('Round '+R.round+': '+(dec?'approved':'rejected')); dec?chime():buzz();
+  }
 }
 function objText(o){ const e=Object.entries(o||{}); return e.length?'['+e.map(([k,v])=>`${k}×${v}`).join(', ')+']':''; }
 const ACOLOR={priority:'#cc4b3e',window:'#b06d12',continuity:'#0b6e63',capacity:'#51657a',preference:'#9a4fb0',referee:'#2563a8'};
