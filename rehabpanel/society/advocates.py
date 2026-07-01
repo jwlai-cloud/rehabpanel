@@ -247,10 +247,35 @@ def _swap_preference(objection, ctx, draft):
     if not p or not cur:
         return None
     pref, cid = p["preferred_mode"], cur["clinician_id"]
+    # 1) open slot: preferred mode + same clinician (strictly non-regressing)
     s = _free_slot_for(lambda sl: sl["mode"] == pref and sl["clinician_id"] == cid, ctx, draft)
     if s:
         return {"move": {"patient_id": pid, "slot_id": s["slot_id"]},
                 "marginal_value": 2.0, "reason": f"{pid} -> {pref} slot (same clinician)"}
+    # 2) open slot: preferred mode + the patient's PRIMARY clinician (fixes pref AND continuity)
+    s = _free_slot_for(lambda sl: sl["mode"] == pref and sl["clinician_id"] == p["primary_clinician_id"],
+                       ctx, draft)
+    if s:
+        return {"move": {"patient_id": pid, "slot_id": s["slot_id"]},
+                "marginal_value": 3.0, "reason": f"{pid} -> {pref} slot w/ primary"}
+    # 3) full plan: prefer a swap with q in the SAME clinician's preferred-mode slot —
+    #    only the modes trade, so continuity is unchanged for both (the safest pref fix).
+    for a in draft:
+        if a["patient_id"] == pid:
+            continue
+        qslot = S.get(a["slot_id"])
+        if qslot and qslot["mode"] == pref and qslot["clinician_id"] == cid:
+            return {"move": {"patient_id": pid, "slot_id": a["slot_id"]},
+                    "marginal_value": 2.0, "reason": f"{pid} <-> {a['patient_id']} (same clinician, {pref})"}
+    # 4) any preferred-mode slot — the referee's coalition model rejects the swap if it
+    #    worsens a higher-ranked objective (e.g. continuity), so this can only help net.
+    for a in draft:
+        if a["patient_id"] == pid:
+            continue
+        qslot = S.get(a["slot_id"])
+        if qslot and qslot["mode"] == pref:
+            return {"move": {"patient_id": pid, "slot_id": a["slot_id"]},
+                    "marginal_value": 2.0, "reason": f"{pid} <-> {a['patient_id']} for {pref} slot"}
     return None
 
 
@@ -297,13 +322,17 @@ class Advocate:
         Qwen call parsed defensively."""
         if is_offline():
             return _OFFLINE_CRITIQUE[self.name](draft, context)
+        objs = []
         try:
             msg = [{"role": "system", "content": self.system},
                    {"role": "user", "content": _render_draft(draft, context)}]
-            objs = parse_json_list(chat(msg, model=ADVOCATE_MODEL))
-            return [o for o in objs if isinstance(o, dict)]
+            objs = [o for o in parse_json_list(chat(msg, model=ADVOCATE_MODEL)) if isinstance(o, dict)]
         except Exception:
-            return []  # never crash the graph on an LLM/transport error
+            objs = []  # never crash the graph on an LLM/transport error
+        # Live LLM output is flaky (empty / unparseable) -> the society would raise
+        # zero objections and return the raw draft. Fall back to the deterministic
+        # critique so it ALWAYS negotiates. Both paths feed the same scorer.
+        return objs or _OFFLINE_CRITIQUE[self.name](draft, context)
 
     # -- propose_swap ---------------------------------------------------------
     def propose_swap(self, objection, state):
@@ -313,6 +342,7 @@ class Advocate:
         draft = state["draft"]
         if is_offline():
             return self._offline_swap(objection, ctx, draft)
+        obj = None
         try:
             payload = {"objection": objection, "draft": draft}
             msg = [{"role": "system", "content": self.system},
@@ -321,9 +351,16 @@ class Advocate:
                                '{"move":{"patient_id":..,"slot_id":..},"marginal_value":<num>,"reason":..}.\n'
                                + json.dumps(payload)}]
             obj = parse_json_obj(chat(msg, model=ADVOCATE_MODEL))
-            return obj if isinstance(obj.get("move"), dict) else None
         except Exception:
-            return None
+            obj = None
+        # accept the LLM swap only if the move references a real patient + slot;
+        # otherwise fall back to the deterministic swap so the round isn't wasted.
+        if isinstance(obj, dict) and isinstance(obj.get("move"), dict):
+            m, pids = obj["move"], {p["patient_id"] for p in ctx["patients"]}
+            sids = {s["slot_id"] for s in ctx["slots"]}
+            if m.get("patient_id") in pids and m.get("slot_id") in sids:
+                return obj
+        return self._offline_swap(objection, ctx, draft)
 
     def _offline_swap(self, objection, ctx, draft):
         if self.name == "continuity":

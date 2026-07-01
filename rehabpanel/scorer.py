@@ -2,10 +2,18 @@
 with the same code so the comparison is credible and judge-reproducible.
 
 value = w_acuity * acuity_coverage
+      + w_seen      * patients_scheduled      # care delivered — seeing a patient has value
       - w_overdue   * total_overdue_days
       - w_continuity* continuity_breaks
       - w_pref      * preference_mismatches
 Hard constraint: capacity feasibility. Any violation => feasible=False.
+
+The `seen` term reflects a clinical objective the earlier formula under-weighted:
+a schedule that SEES more patients delivers more care. Without it, an agent can
+score well by leaving hard-to-place (low-acuity / not-yet-overdue) patients
+unscheduled — under-utilizing clinician time. Rewarding patients-seen removes
+that loophole, so a plan that serves 43 patients isn't beaten by one that serves
+39 with slightly cleaner matches.
 """
 from __future__ import annotations
 import json
@@ -16,6 +24,7 @@ DATA = Path(__file__).resolve().parent.parent / "data"
 
 DEFAULT_WEIGHTS = {
     "acuity": 10.0,      # reward seeing high-acuity patients
+    "seen": 3.0,         # reward per patient scheduled — care delivered (see docstring)
     "overdue": 1.0,      # penalty per patient-day overdue
     "continuity": 4.0,   # penalty per primary-clinician break
     "pref": 2.0,         # penalty per mode/availability mismatch
@@ -90,6 +99,7 @@ def score(assignments, patients, clinicians, slots, weights=None, meta=None):
             pref_mismatch += 1
 
     value = (w["acuity"] * acuity_coverage * len(high)
+             + w.get("seen", 0.0) * len(assigned_pids)   # care delivered — value seeing patients
              - w["overdue"] * overdue_days
              - w["continuity"] * continuity_breaks
              - w["pref"] * pref_mismatch)

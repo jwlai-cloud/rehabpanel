@@ -28,7 +28,9 @@ from ..qwen_client import chat, is_offline, REFEREE_MODEL
 DATA = Path(__file__).resolve().parent.parent.parent / "data"
 PROMPTS = Path(__file__).resolve().parent / "prompts"
 ROUND_CAP = 6        # online default — caps referee LLM calls (token budget)
-SEVERITY_EXIT = 4
+SEVERITY_EXIT = 3   # preference objections are severity 3 — include them so the
+                    # society also optimizes preference (a swap that would worsen a
+                    # higher-ranked objective is still rejected by the referee)
 
 
 def round_cap():
