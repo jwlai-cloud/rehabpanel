@@ -67,6 +67,40 @@ def test_warm_replan_is_less_disruptive_than_cold():
     assert _disruption(plan0, warm) < _disruption(plan0, cold)
 
 
+def test_referee_ranking_decisions():
+    from rehabpanel.society.orchestrator import _decide
+    assert _decide([{"agent": "priority", "value": 3}], []) is True
+    # preference can't outrank priority even with a bigger raw value
+    assert _decide([{"agent": "preference", "value": 9}], [{"agent": "priority", "value": 1}]) is False
+    # capacity in the AGAINST coalition is an absolute veto
+    assert _decide([{"agent": "priority", "value": 1}], [{"agent": "capacity", "value": 1}]) is False
+    # continuity outranks preference
+    assert _decide([{"agent": "continuity", "value": 1}], [{"agent": "preference", "value": 9}]) is True
+
+
+def test_negotiation_emits_transcript_with_coalitions():
+    final = O.negotiate(_tables())
+    trs = [s["transcript"] for s in final["snapshots"] if s.get("transcript")]
+    assert trs, "negotiation produced no transcripts"
+    tr = trs[0]
+    assert tr["turns"] and tr["coalition_for"]
+    assert any(t["stance"] == "ruling" for t in tr["turns"])
+    assert tr["decision"] in ("apply", "reject")
+
+
+def test_incident_replan_surfaces_opposition():
+    """A warm re-plan after a sick incident should produce at least one round with
+    a real AGAINST coalition — the referee brokering a genuine disagreement."""
+    t = _tables()
+    plan0 = O.negotiate(t)["draft"]
+    t2 = dict(t)
+    t2["slots"] = [s for s in t["slots"] if s["clinician_id"] != "C00"]
+    final = O.negotiate(t2, seed_draft=plan0)
+    against = [s["transcript"] for s in final["snapshots"]
+               if s.get("transcript") and s["transcript"]["coalition_against"]]
+    assert against, "no opposing coalition surfaced on incident re-plan"
+
+
 def test_priority_weights_are_causal():
     t = _tables()
     P, C, S, M = t["patients"], t["clinicians"], t["slots"], t["meta"]

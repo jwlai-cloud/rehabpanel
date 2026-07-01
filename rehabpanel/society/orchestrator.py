@@ -22,7 +22,7 @@ import operator
 
 from langgraph.graph import StateGraph, START, END
 
-from .advocates import build_all, parse_json_obj
+from .advocates import build_all, parse_json_obj, _OFFLINE_CRITIQUE
 from ..qwen_client import chat, is_offline, REFEREE_MODEL
 
 DATA = Path(__file__).resolve().parent.parent.parent / "data"
@@ -50,6 +50,7 @@ class SocietyState(TypedDict):
     seed_draft: list       # warm start: repair this plan instead of drafting cold
     draft: list
     objections: list
+    nego: dict             # this round's brokered move + negotiation transcript
     ledger: Annotated[list, operator.add]      # rulings accumulate across rounds
     snapshots: Annotated[list, operator.add]   # per-round plan state (drives the scrub UI)
     round: int
@@ -127,9 +128,9 @@ def node_draft(state: SocietyState) -> dict:
             used_s.add(free["slot_id"])
             draft.append({"patient_id": p["patient_id"], "slot_id": free["slot_id"],
                           "assigned_in_round": 0, "rationale": "draft: acuity-first"})
-    return {"draft": draft, "round": 0, "ledger": [], "stalled": False,
+    return {"draft": draft, "round": 0, "ledger": [], "stalled": False, "nego": {},
             "snapshots": [{"round": 0, "draft": [dict(a) for a in draft],
-                           "rulings": [], "objections": []}]}
+                           "rulings": [], "objections": [], "transcript": None}]}
 
 
 def node_critique(state: SocietyState) -> dict:
@@ -147,40 +148,99 @@ def node_critique(state: SocietyState) -> dict:
     return {"objections": objections}
 
 
-def _referee_rule(top, swap, slot_label):
-    """Build the apply-dict + one human-readable ledger line for a resolved
-    objection. Offline = template; online = let qwen3.7-max phrase the rationale."""
-    move = swap["move"]
-    if is_offline():
-        line = (f"{slot_label} — {top.get('by')}({top.get('patient_id')}, sev "
-                f"{top.get('severity')}): {top.get('reason')}. Ruling: {swap.get('reason')} "
-                f"(marginal value {swap.get('marginal_value')}).")
-        return move, line
+# ---- negotiation: proposals -> coalitions -> referee brokering ---------------
+
+def _ctx(state):
+    return {"patients": state["patients"], "clinicians": state["clinicians"],
+            "slots": state["slots"], "meta": state.get("meta"),
+            "weights": state.get("weights") or {}}
+
+
+def _cost(fn, draft, ctx):
+    """Weighted objection severity an advocate sees in a draft (its 'pain')."""
     try:
-        msg = [{"role": "system", "content": (PROMPTS / "referee.md").read_text()},
-               {"role": "user", "content": "Resolve this objection. Return ONLY JSON "
-                '{"apply":{"<patient_id>":"<slot_id>"},"ledger_entry":"..."}.\n'
-                + json.dumps({"objection": top, "proposed_swap": swap})}]
-        ruling = parse_json_obj(chat(msg, model=REFEREE_MODEL))
-        apply = ruling.get("apply") or {}
-        if apply:
-            pid, sid = next(iter(apply.items()))
-            move = {"patient_id": pid, "slot_id": sid}
-        return move, ruling.get("ledger_entry") or f"{slot_label} — resolved {top.get('patient_id')}."
+        return sum(o.get("severity", 0) for o in fn(draft, ctx))
     except Exception:
-        line = f"{slot_label} — {top.get('by')}({top.get('patient_id')}): {swap.get('reason')}."
-        return move, line
+        return 0
 
 
-def node_arbitrate(state: SocietyState) -> dict:
-    """Referee resolves the single highest-severity *actionable* objection this
-    round: request a swap from the relevant advocate, rule on global weights +
-    marginal value, apply it feasibly, and log one ledger line. One conflict per
-    round keeps the ledger a readable play-by-play (and drives the scrub demo).
-    If no hot objection can be actioned, mark stalled so the loop exits."""
+def _coalitions(move, state):
+    """Referee's internal impact model (deterministic + cheap, even online): apply
+    the move to a copy and group advocates by whose objective improves (FOR) or
+    worsens (AGAINST), sized by the drop/rise in their weighted objection cost."""
+    S = {s["slot_id"]: s for s in state["slots"]}
+    ctx = _ctx(state)
+    after, _ = _apply_move(state["draft"], move, S, 0)
+    forc, against = [], []
+    for name, fn in _OFFLINE_CRITIQUE.items():
+        delta = _cost(fn, state["draft"], ctx) - _cost(fn, after, ctx)  # >0 => improved
+        if delta > 0:
+            forc.append({"agent": name, "value": delta})
+        elif delta < 0:
+            against.append({"agent": name, "value": -delta})
+    return forc, against
+
+
+_ROLE = {"priority": "Priority", "window": "Follow-up Window", "continuity": "Continuity",
+         "capacity": "Capacity", "preference": "Preference", "referee": "Charge-Nurse Referee"}
+
+# Global priority ranking (the design's "acuity > continuity > preference; capacity
+# never violated"). The referee brokers on this ordering, not raw severity sums, so
+# it faithfully weighs objectives without importing the scorer into the graph.
+_RANK = {"capacity": 100, "priority": 40, "window": 30, "continuity": 20, "preference": 10}
+
+
+def _decide(forc, against):
+    """Referee's ruling: never break feasibility (capacity veto), else approve iff
+    the FOR coalition's top objective outranks (or ties) the AGAINST coalition's."""
+    if any(a["agent"] == "capacity" for a in against):
+        return False
+    fr = max((_RANK.get(f["agent"], 0) for f in forc), default=0)
+    ar = max((_RANK.get(a["agent"], 0) for a in against), default=0)
+    return fr > 0 and fr >= ar
+
+
+def _transcript(top, swap, forc, against, label, decision):
+    """Structured negotiation exchange for one contested resource — drives the UI
+    chat and the ledger line."""
+    by = top.get("by")
+    turns = [
+        {"agent": by, "role": _ROLE.get(by, by), "stance": "objects",
+         "text": top.get("reason", ""), "value": top.get("severity", 0)},
+        {"agent": by, "role": _ROLE.get(by, by), "stance": "proposes",
+         "text": swap.get("reason", ""), "value": swap.get("marginal_value", 0)},
+    ]
+    for f in forc:
+        if f["agent"] == by:
+            continue
+        turns.append({"agent": f["agent"], "role": _ROLE.get(f["agent"], f["agent"]),
+                      "stance": "supports", "text": "objective improves", "value": f["value"]})
+    for a in against:
+        turns.append({"agent": a["agent"], "role": _ROLE.get(a["agent"], a["agent"]),
+                      "stance": "opposes", "text": "objective worsens", "value": a["value"]})
+    for_v = sum(f["value"] for f in forc)
+    ag_v = sum(a["value"] for a in against)
+    verb = "approves" if decision else "rejects"
+    turns.append({"agent": "referee", "role": _ROLE["referee"], "stance": "ruling",
+                  "text": f"{verb} — coalition FOR ({for_v}) vs AGAINST ({ag_v}) at current weights",
+                  "value": for_v - ag_v})
+    line = (f"{label} — {_ROLE.get(by, by)}: {swap.get('reason', '')}. "
+            f"Referee {verb} (FOR {for_v} vs AGAINST {ag_v}).")
+    return {"contested": label, "turns": turns,
+            "coalition_for": [f["agent"] for f in forc], "for_value": for_v,
+            "coalition_against": [a["agent"] for a in against], "against_value": ag_v,
+            "decision": "apply" if decision else "reject", "ledger": line}
+
+
+def node_negotiate(state: SocietyState) -> dict:
+    """Draft -> Critique -> NEGOTIATE -> Arbitrate. For the highest-severity
+    actionable objection the relevant advocate proposes a swap; a deterministic
+    impact model forms FOR/AGAINST coalitions; the referee brokers (approve iff
+    the FOR coalition outweighs AGAINST and is net-positive). Records the chosen
+    move + the full exchange transcript; tries the next objection when the referee
+    rejects one; stalls if none survive."""
     advocates = build_all()
     S = {s["slot_id"]: s for s in state["slots"]}
-    rnd = state["round"] + 1
     hot = sorted((o for o in state["objections"] if o.get("severity", 0) >= SEVERITY_EXIT),
                  key=lambda o: -o.get("severity", 0))
     for top in hot:
@@ -196,16 +256,32 @@ def node_arbitrate(state: SocietyState) -> dict:
         move = swap["move"]
         pid, sid = move.get("patient_id"), move.get("slot_id")
         if pid is None or sid not in S:
-            continue  # skip invalid/hallucinated moves before the costly referee call
-        label = _slot_label(S[sid])
-        move, line = _referee_rule(top, swap, label)
-        new_draft, changed = _apply_move(state["draft"], move, S, rnd)
-        if not changed:
-            continue
-        return {"round": rnd, "draft": new_draft, "ledger": [line], "stalled": False,
-                "snapshots": [{"round": rnd, "draft": [dict(a) for a in new_draft],
-                               "rulings": [line], "objections": state["objections"]}]}
-    return {"round": rnd, "stalled": True}  # nothing actionable -> exit
+            continue  # skip invalid/hallucinated moves
+        forc, against = _coalitions(move, state)
+        decision = _decide(forc, against)              # referee brokers on the priority ranking
+        tr = _transcript(top, swap, forc, against, _slot_label(S[sid]), decision)
+        if decision:
+            return {"nego": {"move": move, "transcript": tr, "line": tr["ledger"]}}
+        # referee rejected this one -> try the next objection
+    return {"nego": {"move": None}, "stalled": True}
+
+
+def node_arbitrate(state: SocietyState) -> dict:
+    """Apply the referee-brokered move and log the agreement + transcript."""
+    rnd = state["round"] + 1
+    nego = state.get("nego") or {}
+    move = nego.get("move")
+    if not move:
+        return {"round": rnd, "stalled": True}
+    S = {s["slot_id"]: s for s in state["slots"]}
+    new_draft, changed = _apply_move(state["draft"], move, S, rnd)
+    if not changed:
+        return {"round": rnd, "stalled": True}
+    line = nego.get("line", "")
+    return {"round": rnd, "draft": new_draft, "ledger": [line], "stalled": False,
+            "snapshots": [{"round": rnd, "draft": [dict(a) for a in new_draft],
+                           "rulings": [line], "objections": state["objections"],
+                           "transcript": nego.get("transcript")}]}
 
 
 def should_continue(state: SocietyState) -> str:
@@ -213,7 +289,7 @@ def should_continue(state: SocietyState) -> str:
         return "end"
     hot = [o for o in state["objections"] if o.get("severity", 0) >= SEVERITY_EXIT]
     if hot and state["round"] < round_cap():
-        return "arbitrate"
+        return "negotiate"
     return "end"
 
 
@@ -223,11 +299,13 @@ def build_graph():
     g = StateGraph(SocietyState)
     g.add_node("draft", node_draft)
     g.add_node("critique", node_critique)
+    g.add_node("negotiate", node_negotiate)
     g.add_node("arbitrate", node_arbitrate)
     g.add_edge(START, "draft")
     g.add_edge("draft", "critique")
     g.add_conditional_edges("critique", should_continue,
-                            {"arbitrate": "arbitrate", "end": END})
+                            {"negotiate": "negotiate", "end": END})
+    g.add_edge("negotiate", "arbitrate")
     g.add_edge("arbitrate", "critique")
     return g.compile()
 
@@ -241,7 +319,7 @@ def negotiate(tables, seed_draft=None, weights=None):
         "patients": tables.get("patients", []), "clinicians": tables.get("clinicians", []),
         "slots": tables.get("slots", []), "meta": tables.get("meta", {}),
         "weights": weights or {}, "seed_draft": seed_draft or [],
-        "draft": [], "objections": [], "ledger": [], "snapshots": [],
+        "draft": [], "objections": [], "nego": {}, "ledger": [], "snapshots": [],
         "round": 0, "stalled": False,
     }
     return build_graph().invoke(init)
