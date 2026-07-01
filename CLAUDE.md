@@ -9,7 +9,7 @@ multi-objective score, and the gap widens with scarcity.
 
 Read `docs/RehabPanel_Design_Doc.md` (design, incl. §9 the coordinator app) and
 `docs/spec_coordinator_app.md` before making changes. `docs/BUILD_LOG.md` is the
-running record; `docs/handoff.md` is the original build plan (history).
+running record.
 
 ## Hard guardrails (do not violate)
 1. **No real or anonymized patient data — ever.** All data comes from
@@ -60,7 +60,7 @@ Core + coordinator app are built and tested (`make test` = 30 tests, CI-locked).
 
 ## Working on this repo now
 The build is shipped. Source of truth: `docs/spec_coordinator_app.md` (the app)
-and `docs/spec_negotiation.md` (the engine); `docs/BUILD_LOG.md` for history.
+and `docs/RehabPanel_Design_Doc.md` (design + engine); `docs/BUILD_LOG.md` for history.
 
 - `make test` after anything scorer-adjacent · `make serve` to run the app ·
   `make benchmark` to regenerate the headline gap · `make video` for the demo.

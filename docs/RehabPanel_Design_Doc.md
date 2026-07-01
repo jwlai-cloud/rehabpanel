@@ -129,7 +129,7 @@ The conflict ledger is the demo centerpiece — a single agent never shows this 
 
 ## 5. Data Flow & Schema
 
-Five synthetic JSON tables (full schema in the handoff doc and generator). Output of both pipelines is `assignments.json`; the society additionally emits `conflict_ledger.json`.
+Five synthetic JSON tables (full schema in `rehabpanel/schema.py` and the generator). Output of both pipelines is `assignments.json`; the society additionally emits `conflict_ledger.json`.
 
 ```
 Generator(seed, demand_capacity_ratio)
@@ -148,7 +148,7 @@ The single most persuasive figure: sweep `demand_capacity_ratio` from 0.8 → 1.
 ### ADR-1: Deterministic Python scorer, not an LLM judge
 **Decision:** score both pipelines with a pure-Python objective function.
 **Why:** an LLM judge is non-reproducible and biasable; judges can re-run a Python scorer and get identical numbers. Reproducibility is the single biggest differentiator over typical hackathon entries.
-**Consequence:** the objective weights must be defined and defensible (sourced from domain input, see handoff §questions). Harder: encoding "clinical value" numerically — mitigated by treating weights as configurable and reporting sensitivity.
+**Consequence:** the objective weights must be defined and defensible (sourced from domain input). Harder: encoding "clinical value" numerically — mitigated by treating weights as configurable and reporting sensitivity.
 
 ### ADR-2: Synthetic data generated in-repo, no real/anonymized records
 **Decision:** ship a seeded generator; never ingest real data.
