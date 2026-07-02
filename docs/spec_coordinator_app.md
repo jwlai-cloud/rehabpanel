@@ -98,13 +98,20 @@ real `node_negotiate` between critique and arbitrate:
    coalition's top objective outranks AGAINST (capacity = absolute veto). This
    lets the referee **reject** a move (e.g. don't drop a high-acuity patient for a
    lower-priority gain), not just rubber-stamp.
-4. Each round emits a structured **transcript** (`turns`: objects/proposes/
-   supports/opposes/ruling; `coalition_for/against` + values; `decision`) that
-   drives the UI chat + the ledger line.
+4. Each round emits a structured **transcript** that drives the UI chat + ledger:
+   - **every advocate that objects speaks**, with its own reason (top-severity per
+     advocate) — all five voices are visible, not just the winner's;
+   - the winning advocate **proposes** the swap; `coalition_for/against` + values
+     carry who the move helps / hurts;
+   - the **referee's ruling** is written by the flagship model **in prose** (live),
+     explaining the decision on the ranking; the deterministic rule string is the
+     reproducible fallback (offline / on parse error). The **decision stays
+     deterministic** — the LLM adds rationale, never changes the outcome or score.
 
-The impact model is deterministic even online (uses the rule critiques, not LLM
-calls) so it can't blow the token budget; the scorer is **not** consulted inside
-the graph (guardrail intact).
+The impact model + decision are deterministic even online (rule critiques + a
+priority ranking, no LLM in the loop) so they can't blow the token budget and stay
+reproducible; the only live LLM calls are the advocate critiques and the referee's
+rationale. The scorer is **not** consulted inside the graph (guardrail intact).
 
 ## Views
 

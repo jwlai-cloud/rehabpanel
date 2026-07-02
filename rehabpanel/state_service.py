@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Protocol
 
 from . import generator, baseline
+from .qwen_client import is_offline, BASELINE_MODEL
 from .society import orchestrator as O
 from .scorer import score, DEFAULT_WEIGHTS
 
@@ -21,12 +22,12 @@ INCIDENTS = ("sick", "cancel", "referral")
 
 # the agent roster shown in the UI (name, objective, model tier)
 _AGENTS = [
-    ("priority", "high-acuity seen", "qwen3.6-flash"),
-    ("window", "overdue follow-ups", "qwen3.6-flash"),
-    ("continuity", "stay with primary nurse", "qwen3.6-flash"),
-    ("capacity", "feasibility (veto)", "qwen3.6-flash"),
-    ("preference", "mode/availability", "qwen3.6-flash"),
-    ("referee", "arbitrate + log", "qwen3.7-max"),
+    ("priority", "high-acuity seen", "fast tier"),
+    ("window", "overdue follow-ups", "fast tier"),
+    ("continuity", "stay with primary nurse", "fast tier"),
+    ("capacity", "feasibility (veto)", "fast tier"),
+    ("preference", "mode/availability", "fast tier"),
+    ("referee", "arbitrate + log", "flagship tier"),
 ]
 _PROMPTS = Path(__file__).resolve().parent / "society" / "prompts"
 
@@ -183,8 +184,7 @@ class CoordinatorService:
         t = w["tables"]
         w["pre_replan_plan"] = list(w["committed_plan"])
         if kind == "sick":
-            # clinician C00 out Tuesday -> drop their Tue slots
-            tue = (date.fromisoformat(t["meta"]["t0"])).isoformat()  # Mon t0; Tue = +1
+            # clinician C00 out Tuesday -> drop their Tue slots (Mon t0; Tue = +1)
             from datetime import timedelta
             tue = (date.fromisoformat(t["meta"]["t0"]) + timedelta(days=1)).isoformat()
             gone = {s["slot_id"] for s in t["slots"] if s["clinician_id"] == "C00" and s["date"] == tue}
@@ -253,6 +253,7 @@ class CoordinatorService:
         disruption = _disruption(w["pre_replan_plan"], w["committed_plan"]) if w["pre_replan_plan"] else None
         return {
             "meta": t["meta"], "weights": w["weights"], "headline_gap": w["headline_gap"],
+            "live": not is_offline(), "baseline_model": BASELINE_MODEL,   # so the UI states its real mode
             "days": ["Mon", "Tue", "Wed", "Thu", "Fri"],
             "clinicians": [{"id": c["clinician_id"], "name": c["name"],
                             "status": w["roster_status"].get(c["clinician_id"], "available"),

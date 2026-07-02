@@ -77,3 +77,37 @@ society hits its swap/round ceiling. Society's win comes from continuity (e.g.
 - `ui/index.html`: scrubber (◀ ▶ Play slider) animates the negotiation — value
   climbs −141→−70 round by round, moved cards glow, ledger fills, scoreboard
   tracks the live round. Seed 7 @ 1.3 → 10 rounds.
+
+## 2026-07-01
+
+### Scorer reweight — value breadth of care
+- `DEFAULT_WEIGHTS` now values patients-seen: `seen=5` per scheduled patient
+  (acuity 10, overdue 1, continuity 2, pref 1). Patients-seen is the primary
+  clinical good, so the objective rewards breadth of care. Scores flip positive.
+  `make benchmark` re-run: society wins every scarcity level (means +28→+44, min
+  +18). Locked by `test_scorer.py` — suite green.
+
+### Entry-point consolidation + replay-as-default
+- Removed the separate `/stream` page (`ui/stream.html` + route) and the offline
+  **Play** button. Schedule view now has **▶ Replay** — a bundled recording of a
+  REAL Qwen negotiation (`/api/replay`, key-free, the **default** view) — and
+  **◉ Run live (Qwen)** (`/api/stream`, fresh real run). No deterministic-society
+  score is ever shown in the UI; the score spark grows per round.
+- Bundled `rehabpanel/recordings/negotiation.jsonl` (fully synthetic) so Replay
+  works on deploy with no key. Deploy = **Config A** (`REHABPANEL_OFFLINE=1` + key;
+  Run live forces live on click). Model ids removed from the UI (tier labels only,
+  since they get swapped as quota/preview strings shift).
+
+### Richer negotiation transcript (A + B)
+- **A** — every advocate that objects now speaks each round with its own reason
+  (not just the winner): all five voices visible.
+- **B** — the flagship referee writes its ruling rationale **in prose** (live); the
+  deterministic rule string is the reproducible fallback + ledger line. The
+  **decision stays deterministic** (`_decide` on the priority ranking) — the LLM
+  adds reasoning, never changes the outcome or the score.
+- Live re-capture (advocates on a strong tier, referee flagship): **12 rounds,
+  160 → 181 (+21)**, all-voices + prose rulings; bundled as the Replay demo. Live
+  converges below the offline ceiling (~212) because LLM critique is less
+  exhaustive than the rule critique — honest, not a scorer artifact.
+- Tests updated for the new transcript shape (generic supports/opposes turns →
+  coalition arrays). Suite **36 passed**.

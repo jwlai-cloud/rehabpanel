@@ -34,3 +34,16 @@ def test_unscheduled_high_acuity_hurts_value():
     partial = [{"patient_id": "P1", "slot_id": "S1"}]  # drop the acuity-9 patient
     assert score(full, PATS, CLIN, SLOTS, meta=META)["value"] > \
            score(partial, PATS, CLIN, SLOTS, meta=META)["value"]
+
+
+def test_seeing_more_patients_raises_value():
+    """Care delivered has value: seeing a low-acuity, not-yet-overdue patient — even
+    with a single continuity break — beats leaving them unseen. This closes the
+    loophole where an agent scores well by dropping hard-to-place patients."""
+    slots = SLOTS + [{"slot_id": "SX", "clinician_id": "C99", "date": "2026-06-09", "mode": "clinic"}]
+    clin = CLIN + [{"clinician_id": "C99", "weekly_capacity_slots": 1, "max_home_visits_per_day": 1}]
+    # P1 seen in SX: wrong clinician (continuity break) but preferred mode — vs P1 unseen
+    seen = score([{"patient_id": "P0", "slot_id": "S0"}, {"patient_id": "P1", "slot_id": "SX"}],
+                 PATS, clin, slots, meta=META)["value"]
+    unseen = score([{"patient_id": "P0", "slot_id": "S0"}], PATS, clin, slots, meta=META)["value"]
+    assert seen > unseen   # seeing P1 (even with one break) beats not seeing them

@@ -44,13 +44,17 @@ def parse_json_list(text: str) -> list:
         return []
 
 
-def parse_json_obj(text: str) -> dict:
-    """Extract the first JSON object; {} on failure."""
-    try:
-        m = re.search(r"\{.*\}", text, re.DOTALL)
-        return json.loads(m.group(0)) if m else {}
-    except (json.JSONDecodeError, AttributeError, TypeError):
-        return {}
+def _valid_objection(o) -> bool:
+    """A live LLM objection is usable only if it has a NUMERIC severity and a target
+    (patient, or slot/clinician for capacity). `isinstance(o, dict)` alone is too weak:
+    a dict missing severity/target would be kept and skip the deterministic fallback,
+    then misbehave downstream (severity sort, propose_swap). Drop it instead."""
+    if not isinstance(o, dict):
+        return False
+    sev = o.get("severity")
+    if isinstance(sev, bool) or not isinstance(sev, (int, float)):
+        return False
+    return bool(o.get("patient_id") or o.get("slot_id") or o.get("clinician_id"))
 
 
 # ---- shared deterministic helpers (used by the offline path) ---------------
@@ -84,11 +88,13 @@ def _open_slots(ctx, draft):
     return [s for s in ctx["slots"] if s["slot_id"] not in used]
 
 
-# Scorer's default weights — used to scale advocate severity so the Rules view is
-# causal: a weight near 0 drops that objective below SEVERITY_EXIT (the referee
-# ignores it), a raised weight makes it outrank others. With no weights passed,
-# severities are unchanged (default behaviour).
-_DEFAULT_W = {"acuity": 10.0, "overdue": 1.0, "continuity": 4.0, "pref": 2.0}
+# Scale advocate severity so the Rules view is causal: a weight near 0 drops that
+# objective below SEVERITY_EXIT (the referee ignores it), a raised weight makes it
+# outrank others. The reference is the SCORER's own default weights, so the DEFAULT
+# config always leaves severities UNSCALED — otherwise re-weighting the scorer would
+# silently mute the advocates (halving continuity/pref once dropped them below exit).
+from ..scorer import DEFAULT_WEIGHTS as _SCORER_W
+_DEFAULT_W = {k: _SCORER_W[k] for k in ("acuity", "overdue", "continuity", "pref")}
 
 
 def _scale(ctx, key, base):
@@ -247,10 +253,35 @@ def _swap_preference(objection, ctx, draft):
     if not p or not cur:
         return None
     pref, cid = p["preferred_mode"], cur["clinician_id"]
+    # 1) open slot: preferred mode + same clinician (strictly non-regressing)
     s = _free_slot_for(lambda sl: sl["mode"] == pref and sl["clinician_id"] == cid, ctx, draft)
     if s:
         return {"move": {"patient_id": pid, "slot_id": s["slot_id"]},
                 "marginal_value": 2.0, "reason": f"{pid} -> {pref} slot (same clinician)"}
+    # 2) open slot: preferred mode + the patient's PRIMARY clinician (fixes pref AND continuity)
+    s = _free_slot_for(lambda sl: sl["mode"] == pref and sl["clinician_id"] == p["primary_clinician_id"],
+                       ctx, draft)
+    if s:
+        return {"move": {"patient_id": pid, "slot_id": s["slot_id"]},
+                "marginal_value": 3.0, "reason": f"{pid} -> {pref} slot w/ primary"}
+    # 3) full plan: prefer a swap with q in the SAME clinician's preferred-mode slot —
+    #    only the modes trade, so continuity is unchanged for both (the safest pref fix).
+    for a in draft:
+        if a["patient_id"] == pid:
+            continue
+        qslot = S.get(a["slot_id"])
+        if qslot and qslot["mode"] == pref and qslot["clinician_id"] == cid:
+            return {"move": {"patient_id": pid, "slot_id": a["slot_id"]},
+                    "marginal_value": 2.0, "reason": f"{pid} <-> {a['patient_id']} (same clinician, {pref})"}
+    # 4) any preferred-mode slot — the referee's coalition model rejects the swap if it
+    #    worsens a higher-ranked objective (e.g. continuity), so this can only help net.
+    for a in draft:
+        if a["patient_id"] == pid:
+            continue
+        qslot = S.get(a["slot_id"])
+        if qslot and qslot["mode"] == pref:
+            return {"move": {"patient_id": pid, "slot_id": a["slot_id"]},
+                    "marginal_value": 2.0, "reason": f"{pid} <-> {a['patient_id']} for {pref} slot"}
     return None
 
 
@@ -297,33 +328,39 @@ class Advocate:
         Qwen call parsed defensively."""
         if is_offline():
             return _OFFLINE_CRITIQUE[self.name](draft, context)
+        objs = []
         try:
-            msg = [{"role": "system", "content": self.system},
-                   {"role": "user", "content": _render_draft(draft, context)}]
-            objs = parse_json_list(chat(msg, model=ADVOCATE_MODEL))
-            return [o for o in objs if isinstance(o, dict)]
+            # System content = a cacheable caseload block (identical across all
+            # advocates + rounds -> explicit context cache, guaranteed hit) + this
+            # advocate's role. User = only the small, changing plan state. Ask for the
+            # TOP 3 objections, not an exhaustive list — tiny output = fast + cheap.
+            sysblocks = [
+                {"type": "text", "text": _caseload_ref(context),
+                 "cache_control": {"type": "ephemeral"}},   # DashScope context cache marker
+                {"type": "text", "text": self.system},
+            ]
+            usermsg = (_assignment_state(draft, context) +
+                       '\n\nReturn ONLY your 3 most severe objections on YOUR objective as a JSON list, '
+                       'most severe first: [{"patient_id":..,"slot_id":..,"severity":1-10,"reason":".."}]. '
+                       "[] if none.")
+            msg = [{"role": "system", "content": sysblocks}, {"role": "user", "content": usermsg}]
+            objs = [o for o in parse_json_list(chat(msg, model=ADVOCATE_MODEL)) if _valid_objection(o)][:3]
         except Exception:
-            return []  # never crash the graph on an LLM/transport error
+            objs = []  # never crash the graph on an LLM/transport error
+        # Live LLM output is flaky (empty / unparseable) -> the society would raise
+        # zero objections and return the raw draft. Fall back to the deterministic
+        # critique so it ALWAYS negotiates. Both paths feed the same scorer.
+        return objs or _OFFLINE_CRITIQUE[self.name](draft, context)
 
     # -- propose_swap ---------------------------------------------------------
     def propose_swap(self, objection, state):
-        """A swap + the marginal value the advocate places on the trade."""
+        """A concrete swap addressing the objection — DETERMINISTIC in both modes.
+        The advocates' real LLM reasoning lives in critique(); the mechanical swap
+        (which feasible slot to move to) needs no extra LLM round-trip, so live runs
+        stay fast/cheap: the only live calls are the short, cached-prefix critiques."""
         ctx = {k: state[k] for k in ("patients", "clinicians", "slots") if k in state}
         ctx["meta"] = state.get("meta")
-        draft = state["draft"]
-        if is_offline():
-            return self._offline_swap(objection, ctx, draft)
-        try:
-            payload = {"objection": objection, "draft": draft}
-            msg = [{"role": "system", "content": self.system},
-                   {"role": "user",
-                    "content": "Propose ONE swap to address this objection. Return ONLY JSON "
-                               '{"move":{"patient_id":..,"slot_id":..},"marginal_value":<num>,"reason":..}.\n'
-                               + json.dumps(payload)}]
-            obj = parse_json_obj(chat(msg, model=ADVOCATE_MODEL))
-            return obj if isinstance(obj.get("move"), dict) else None
-        except Exception:
-            return None
+        return self._offline_swap(objection, ctx, state["draft"])
 
     def _offline_swap(self, objection, ctx, draft):
         if self.name == "continuity":
@@ -335,19 +372,25 @@ class Advocate:
         return None  # capacity does not trade
 
 
-def _render_draft(draft, context):
-    """Compact context for the LLM path — short to protect the token budget."""
-    P = _index(context["patients"], "patient_id")
-    S = _index(context["slots"], "slot_id")
-    rows = []
-    for a in draft:
-        p, s = P.get(a["patient_id"]), S.get(a["slot_id"])
-        if p and s:
-            rows.append(f"{p['patient_id']}(acu{p['acuity_score']},prim {p['primary_clinician_id']},"
-                        f"pref {p['preferred_mode']})->{s['slot_id']}[{s['clinician_id']},{s['mode']},{s['date']}]")
-    unseen = [p["patient_id"] for p in context["patients"] if p["patient_id"] not in _assigned_map(draft)]
-    return ("DRAFT:\n" + "\n".join(rows) + "\n\nUNSCHEDULED: " + ", ".join(unseen)
-            + "\n\nFile your objections now.")
+def _caseload_ref(context):
+    """The invariant caseload as a compact table. IDENTICAL on every call and every
+    round, so it forms a cacheable prompt PREFIX — Qwen auto prefix-caching bills the
+    big context once and re-prefills it near-instantly, instead of re-sending it per
+    advocate per round (the token/latency waste)."""
+    P, S = context["patients"], context["slots"]
+    pl = "\n".join(f"{p['patient_id']} acu{p['acuity_score']} prim:{p['primary_clinician_id']} "
+                   f"pref:{p['preferred_mode']} due:{p['followup_due_date']}" for p in P)
+    sl = "\n".join(f"{s['slot_id']} {s['clinician_id']} {s['mode']} {s['date']}" for s in S)
+    return f"CASELOAD (fixed reference)\n# patients: id acuity primary pref due\n{pl}\n\n# slots: id clinician mode date\n{sl}"
+
+
+def _assignment_state(draft, context):
+    """The VARIABLE part — just the current patient->slot map + who's unscheduled.
+    Small, so only this changes between calls; the caseload prefix stays cached."""
+    seated = ", ".join(f"{a['patient_id']}->{a['slot_id']}" for a in draft)
+    seen = _assigned_map(draft)
+    unseen = [p["patient_id"] for p in context["patients"] if p["patient_id"] not in seen]
+    return f"CURRENT PLAN: {seated}\nUNSCHEDULED: {', '.join(unseen) or 'none'}"
 
 
 def build_all():

@@ -4,13 +4,22 @@ CoordinatorService — the engine + scorer do the work. Single in-memory session
 Run: uvicorn rehabpanel.api:app --reload   (or `make serve`)
 Respects qwen_client.is_offline(): deterministic without a key, live Qwen with.
 """
+import hmac
+import json
+import logging
+import os
 from pathlib import Path
 
+log = logging.getLogger("rehabpanel")
+
 from fastapi import FastAPI
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 from pydantic import BaseModel
 
-from .state_service import CoordinatorService, INCIDENTS
+from . import generator
+from .society import orchestrator as O
+from .scorer import score as _score, DEFAULT_WEIGHTS
+from .state_service import CoordinatorService, INCIDENTS, _cells
 
 app = FastAPI(title="RehabPanel Coordinator")
 svc = CoordinatorService()
@@ -50,6 +59,88 @@ def replan():
 @app.post("/api/rules")
 def rules(r: Rules):
     return svc.set_rules({k: v for k, v in r.model_dump().items() if v is not None})
+
+
+@app.get("/api/stream")
+def stream(seed: int = 7, ratio: float = 1.3, token: str = ""):
+    """Server-Sent Events: run a LIVE Qwen negotiation and emit each round the instant
+    its node finishes — so the UI renders the debate in REAL TIME (the ~15s of critique
+    LLM calls happen between events). Forces live mode for the duration; needs the key.
+
+    Optional gate: if REHABPANEL_DEMO_TOKEN is set (public deploy), the caller must pass
+    a matching ?token= — this endpoint bills the voucher, so an ungated public URL is a
+    cost/quota DoS. Token rides as a query param because EventSource can't send headers;
+    it is a throwaway demo token, never the API key. Unset (local dev) => no gate."""
+    gate = os.environ.get("REHABPANEL_DEMO_TOKEN")
+    if gate and not hmac.compare_digest(token, gate):
+        return JSONResponse({"error": "live negotiation is token-gated on this deployment"},
+                            status_code=401)
+    t = generator.generate(seed=seed, ratio=ratio, write=False)
+    P = {p["patient_id"]: p for p in t["patients"]}
+    S = {s["slot_id"]: s for s in t["slots"]}
+    C = {c["clinician_id"]: c for c in t["clinicians"]}
+
+    def gen():
+        prev = os.environ.get("REHABPANEL_OFFLINE")
+        os.environ["REHABPANEL_OFFLINE"] = "0"          # real Qwen for the live stream
+        try:
+            yield f"data: {json.dumps({'hello': True, 'patients': len(t['patients']), 'slots': len(t['slots'])})}\n\n"
+            ledger = []
+            for snap in O.negotiate_stream(t, weights=dict(DEFAULT_WEIGHTS)):
+                ledger += snap.get("rulings") or []
+                sc = _score(snap["draft"], t["patients"], t["clinicians"], t["slots"], meta=t["meta"])
+                payload = {
+                    "round": snap["round"],
+                    "value": sc["value"],
+                    "continuity_breaks": sc["continuity_breaks"],
+                    "preference_mismatches": sc["preference_mismatches"],
+                    "scheduled": sc["patients_scheduled"],
+                    "transcript": snap.get("transcript"),
+                    "cells": _cells(snap["draft"], P, S, C),
+                    "ledger": list(ledger),
+                }
+                yield f"data: {json.dumps(payload)}\n\n"
+            yield f"data: {json.dumps({'done': True})}\n\n"
+        except Exception as e:                          # surface a stream error instead of hanging
+            log.exception("live negotiation stream failed")   # detail to server logs, not the client
+            yield f"data: {json.dumps({'error': 'live negotiation failed — check server logs'})}\n\n"
+        finally:
+            if prev is None:
+                os.environ.pop("REHABPANEL_OFFLINE", None)
+            else:
+                os.environ["REHABPANEL_OFFLINE"] = prev
+
+    return StreamingResponse(gen(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no",
+                                      "Connection": "keep-alive"})
+
+
+_BUNDLED_REPLAY = Path(__file__).resolve().parent / "recordings" / "negotiation.jsonl"
+
+
+@app.get("/api/replay")
+def replay():
+    """Return a previously recorded real-Qwen negotiation (round events) so the SPA can
+    replay it — no key, no tokens. Reads the jsonl at $REHABPANEL_REPLAY, else the bundled
+    recording. Lines are "<ts>\\t<sse-payload>". This is the SPA's default view and a
+    no-cost demo of a genuine negotiation."""
+    path = os.environ.get("REHABPANEL_REPLAY")
+    if not path or not Path(path).exists():
+        path = str(_BUNDLED_REPLAY) if _BUNDLED_REPLAY.exists() else None
+    if not path:
+        return JSONResponse({"error": "no replay available"}, status_code=404)
+    rounds = []
+    for line in Path(path).read_text().splitlines():
+        if not line.strip():
+            continue
+        _, _, pl = line.partition("\t") if "\t" in line else (None, None, line)
+        try:
+            d = json.loads(pl)
+        except Exception:
+            continue
+        if "round" in d:
+            rounds.append(d)
+    return {"events": rounds}
 
 
 # serve the coordinator SPA at /

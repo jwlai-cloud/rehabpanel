@@ -15,6 +15,7 @@ Graph:
                          |________________|  no  -> END
 """
 import argparse, json, os
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from pathlib import Path
 from typing import TypedDict, Annotated
@@ -22,13 +23,18 @@ import operator
 
 from langgraph.graph import StateGraph, START, END
 
-from .advocates import build_all, parse_json_obj, _OFFLINE_CRITIQUE
+from .advocates import build_all, _OFFLINE_CRITIQUE
 from ..qwen_client import chat, is_offline, REFEREE_MODEL
 
 DATA = Path(__file__).resolve().parent.parent.parent / "data"
 PROMPTS = Path(__file__).resolve().parent / "prompts"
-ROUND_CAP = 6        # online default — caps referee LLM calls (token budget)
-SEVERITY_EXIT = 4
+ROUND_CAP = 10       # online default — enough rounds for the society to clear the
+                     # single-agent score with margin (~+196 vs ~+183 at seed 7),
+                     # while staying cheap: critique runs in parallel, so ~10 rounds
+                     # is ~40s of qwen3.5-flash calls. Override with REHABPANEL_ROUND_CAP.
+SEVERITY_EXIT = 3   # preference objections are severity 3 — include them so the
+                    # society also optimizes preference (a swap that would worsen a
+                    # higher-ranked objective is still rejected by the referee)
 
 
 def round_cap():
@@ -37,7 +43,10 @@ def round_cap():
     to protect the $40 voucher. Override with REHABPANEL_ROUND_CAP."""
     env = os.environ.get("REHABPANEL_ROUND_CAP")
     if env:
-        return int(env)
+        try:                                   # tolerate a fat-fingered value; clamp so it can't
+            return max(1, min(int(env), 100))  # run unbounded live rounds (each round bills the voucher)
+        except ValueError:
+            pass
     return 40 if is_offline() else ROUND_CAP
 
 
@@ -134,17 +143,24 @@ def node_draft(state: SocietyState) -> dict:
 
 
 def node_critique(state: SocietyState) -> dict:
-    """Each advocate files objections (1-10 severity) against the current draft."""
+    """Each advocate files objections (1-10 severity) against the current draft.
+    The five advocates run CONCURRENTLY — offline it's free; live it collapses five
+    sequential Qwen calls into one round-trip, the main lever that makes a real-LLM
+    negotiation fast enough to watch."""
     advocates = build_all()
     ctx = {k: state[k] for k in ("patients", "clinicians", "slots")}
     ctx["meta"] = state.get("meta")
     ctx["weights"] = state.get("weights") or {}
-    objections = []
-    for name, adv in advocates.items():
+
+    def _one(item):
+        name, adv = item
         try:
-            objections += [{**o, "by": name} for o in adv.critique(state["draft"], ctx)]
+            return [{**o, "by": name} for o in adv.critique(state["draft"], ctx)]
         except Exception:
-            pass  # an advocate must never crash the negotiation
+            return []  # an advocate must never crash the negotiation
+
+    with ThreadPoolExecutor(max_workers=len(advocates)) as ex:
+        objections = [o for group in ex.map(_one, advocates.items()) for o in group]
     return {"objections": objections}
 
 
@@ -234,36 +250,60 @@ def _top_obj(agent, state):
     return max(objs, key=lambda o: o.get("severity", 0)) if objs else None
 
 
-def _transcript(top, swap, forc, against, label, decision, counter=None, chosen="proposal"):
-    """Structured negotiation exchange — drives the UI chat + ledger line. With a
-    `counter` (bargaining mode), it records the opposer's counter-proposal and which
-    side the referee chose."""
+def _system_referee():
+    p = PROMPTS / "referee.md"
+    return p.read_text() if p.exists() else \
+        "You are the charge-nurse referee arbitrating a rehab scheduling negotiation."
+
+
+def _referee_rationale(label, win_role, win_reason, forc, against, decision):
+    """(B) The flagship referee writes its ruling rationale in prose — LIVE ONLY.
+    Returns '' offline or on any failure, so the deterministic ruling text stays the
+    reproducible fallback. This ADDS reasoning to the chat; it never changes the
+    decision (still made by _decide) or the scorer."""
+    if is_offline():
+        return ""
+    fobj = ", ".join(_ROLE.get(f["agent"], f["agent"]) for f in forc) or "none"
+    aobj = ", ".join(_ROLE.get(a["agent"], a["agent"]) for a in against) or "none"
+    user = (f"Contested slot {label}. Proposal by {win_role}: {win_reason}\n"
+            f"Objectives it improves: {fobj}\nObjectives it worsens: {aobj}\n"
+            "Priority ranking: capacity > acuity > overdue > continuity > preference.\n"
+            f"Verdict (already decided): {'APPROVE' if decision else 'REJECT'}.\n"
+            "In ONE plain sentence, explain WHY this ruling is right on that ranking. No preamble.")
+    try:
+        msg = [{"role": "system", "content": _system_referee()}, {"role": "user", "content": user}]
+        return ((chat(msg, model=REFEREE_MODEL) or "").strip().split("\n")[0])[:240]
+    except Exception:
+        return ""
+
+
+def _transcript(top, swap, forc, against, label, decision, counter=None, chosen="proposal",
+                objections=None, ruling_text=""):
+    """Structured negotiation exchange — drives the UI chat + ledger line.
+    (A) Every advocate that filed an objection this round speaks, with its OWN reason
+    (top-severity per advocate) — so all five voices are visible, not just the winner.
+    (B) `ruling_text` (LLM prose) drives the referee bubble when present; the
+    deterministic rule string is the fallback and the ledger's audit line."""
     by = top.get("by")
-    # the "active" proposer whose move is actually applied — the counter-proposer
-    # when the referee chose the counter, else the original proposer. Drives both
-    # the skipped 'supports' turn (they already spoke via proposes/counters) and
-    # the ledger attribution, so the ledger names who really won.
     counter_won = bool(decision and chosen == "counter" and counter)
-    win = counter["agent"] if counter_won else by
+    win = counter["agent"] if counter_won else by            # who actually won — for ledger attribution
     win_reason = counter.get("reason", "") if counter_won else swap.get("reason", "")
-    turns = [
-        {"agent": by, "role": _ROLE.get(by, by), "stance": "objects",
-         "text": top.get("reason", ""), "value": top.get("severity", 0)},
-        {"agent": by, "role": _ROLE.get(by, by), "stance": "proposes",
-         "text": swap.get("reason", ""), "value": swap.get("marginal_value", 0)},
-    ]
+    # (A) one 'objects' turn per advocate, its own LLM reason, ordered by severity
+    top_by_agent = {}
+    for o in (objections or [top]):
+        a = o.get("by")
+        if a and o.get("severity", 0) > top_by_agent.get(a, {}).get("severity", -1):
+            top_by_agent[a] = o
+    voiced = sorted(top_by_agent.values(), key=lambda o: -o.get("severity", 0)) or [top]
+    turns = [{"agent": o.get("by"), "role": _ROLE.get(o.get("by"), o.get("by")),
+              "stance": "objects", "text": o.get("reason", ""), "value": o.get("severity", 0)}
+             for o in voiced]
+    turns.append({"agent": by, "role": _ROLE.get(by, by), "stance": "proposes",
+                  "text": swap.get("reason", ""), "value": swap.get("marginal_value", 0)})
     if counter:
         ca = counter["agent"]
         turns.append({"agent": ca, "role": _ROLE.get(ca, ca), "stance": "counters",
                       "text": counter.get("reason", ""), "value": counter.get("marginal_value", 0)})
-    for f in forc:
-        if f["agent"] == win:
-            continue
-        turns.append({"agent": f["agent"], "role": _ROLE.get(f["agent"], f["agent"]),
-                      "stance": "supports", "text": "objective improves", "value": f["value"]})
-    for a in against:
-        turns.append({"agent": a["agent"], "role": _ROLE.get(a["agent"], a["agent"]),
-                      "stance": "opposes", "text": "objective worsens", "value": a["value"]})
     for_v = sum(f["value"] for f in forc)
     ag_v = sum(a["value"] for a in against)
     if not decision:
@@ -273,7 +313,8 @@ def _transcript(top, swap, forc, against, label, decision, counter=None, chosen=
     else:
         rule = f"approves — coalition FOR ({for_v}) vs AGAINST ({ag_v})"
     turns.append({"agent": "referee", "role": _ROLE["referee"], "stance": "ruling",
-                  "text": rule + " at current weights", "value": for_v - ag_v})
+                  "text": (ruling_text or "").strip() or (rule + " at current weights"),
+                  "value": for_v - ag_v})
     line = f"{label} — {_ROLE.get(win, win)}: {win_reason}. Referee {rule}."
     return {"contested": label, "turns": turns,
             "coalition_for": [f["agent"] for f in forc], "for_value": for_v,
@@ -322,11 +363,16 @@ def node_negotiate(state: SocietyState) -> dict:
         label = _slot_label(S[swap["move"]["slot_id"]])
         if chosen:
             _, move_, f_, a_ = chosen
-            tr = _transcript(top, swap, f_, a_, label, True, counter=counter, chosen=chosen[0])
+            wa = counter["agent"] if (chosen[0] == "counter" and counter) else top.get("by")
+            wr = counter.get("reason", "") if (chosen[0] == "counter" and counter) else swap.get("reason", "")
+            ruling_text = _referee_rationale(label, _ROLE.get(wa, wa), wr, f_, a_, True)  # (B) live prose
+            tr = _transcript(top, swap, f_, a_, label, True, counter=counter, chosen=chosen[0],
+                             objections=state["objections"], ruling_text=ruling_text)     # (A) all voices
             tr["rejected"] = rejected
             return {"nego": {"move": move_, "transcript": tr, "line": tr["ledger"]}}
-        tr = _transcript(top, swap, forc, against, label, False, counter=counter)
-        rejected.append({"contested": tr["contested"], "role": tr["turns"][0]["role"],
+        tr = _transcript(top, swap, forc, against, label, False, counter=counter,
+                         objections=state["objections"])
+        rejected.append({"contested": tr["contested"], "role": _ROLE.get(top.get("by"), top.get("by")),
                          "line": tr["ledger"]})
     return {"nego": {"move": None, "rejected": rejected}, "stalled": True}
 
@@ -388,6 +434,26 @@ def negotiate(tables, seed_draft=None, weights=None):
         "round": 0, "stalled": False,
     }
     return build_graph().invoke(init)
+
+
+def negotiate_stream(tables, seed_draft=None, weights=None):
+    """Same negotiation, but YIELDS each round's snapshot the instant its graph node
+    finishes — so a caller can render the debate in REAL TIME as the live LLM produces
+    it (the ~critique LLM calls happen between yields), instead of waiting for the whole
+    batch. Drives the SSE stream endpoint."""
+    init: SocietyState = {
+        "patients": tables.get("patients", []), "clinicians": tables.get("clinicians", []),
+        "slots": tables.get("slots", []), "meta": tables.get("meta", {}),
+        "weights": weights or {}, "seed_draft": seed_draft or [],
+        "draft": [], "objections": [], "nego": {}, "ledger": [], "snapshots": [],
+        "round": 0, "stalled": False,
+    }
+    for step in build_graph().stream(init):          # stream_mode=updates -> {node: delta}
+        for _node, delta in step.items():
+            if not isinstance(delta, dict):
+                continue
+            for snap in (delta.get("snapshots") or []):
+                yield snap                            # one completed round (draft / arbitrate)
 
 
 def run(seed=7):

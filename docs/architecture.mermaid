@@ -9,16 +9,16 @@ flowchart TB
     TBL --> DR
 
     subgraph BASE["Baseline — single agent"]
-        B1["baseline.py<br/>one Qwen pass · acuity-first greedy (offline)"]
+        B1["baseline.py<br/>one Qwen pass · acuity-first greedy fallback"]
         B1 --> BOUT["assignments_baseline.json"]
     end
 
     subgraph SOC["Society — LangGraph negotiation (orchestrator.py)"]
-        DR["node_draft<br/>acuity-first skeleton (or warm seed)"]
-        CR["node_critique<br/>5 advocates file objections"]
+        DR["node_draft<br/>acuity-first skeleton, no LLM (or warm seed)"]
+        CR["node_critique<br/>all 5 advocates object in parallel ·<br/>each on its one objective, own reason"]
         CD{"should_continue<br/>hot objection &amp; round &lt; cap?"}
-        NG["node_negotiate<br/>advocate proposes · FOR/AGAINST coalitions ·<br/>referee brokers on rank<br/><i>bargaining (opt): opposer COUNTERS →<br/>referee weighs proposal vs counter (margin)</i>"]
-        AR["node_arbitrate<br/>apply brokered move<br/>+ ledger line + transcript"]
+        NG["node_negotiate<br/>top objector proposes a swap ·<br/>FOR/AGAINST coalitions · referee brokers on rank"]
+        AR["node_arbitrate<br/>apply brokered move · deterministic decision ·<br/>referee writes ruling rationale in prose (live) ·<br/>+ ledger line + transcript"]
         EN(["END"])
         DR --> CR
         CR --> CD
@@ -28,29 +28,30 @@ flowchart TB
         CD -- "no · stalled / no hot" --> EN
     end
 
-    subgraph ADV["Advocates — distinct by role + tool + tier · qwen3.6-flash"]
+    subgraph ADV["Advocates — distinct by role + tool + tier · fast tier"]
         A1["Priority"]
         A2["Window"]
         A3["Continuity"]
         A4["Capacity · veto"]
         A5["Preference"]
     end
-    CR -. consults .-> ADV
-    AR -. arbitrates .-> REF["Charge-Nurse Referee<br/>qwen3.7-max"]
+    CR -. all voice .-> ADV
+    AR -. arbitrates + explains .-> REF["Charge-Nurse Referee<br/>flagship tier"]
 
-    EN --> SOUT["assignments_society.json<br/>conflict_ledger.json<br/>society_rounds.json"]
+    EN --> SOUT["final plan · conflict ledger ·<br/>per-round snapshots (transcript + score)"]
 
-    QWEN["Qwen Cloud · dashscope-intl (Alibaba Cloud)<br/>— or deterministic offline path (REHABPANEL_OFFLINE) —"]
+    QWEN["Qwen Cloud · dashscope-intl (Alibaba Cloud)<br/>differentiate by TIER, not vendor"]
+    OFF["key-free deterministic path<br/>(REHABPANEL_OFFLINE) — CI + unit tests only"]
     B1 -. LLM .-> QWEN
     ADV -. LLM .-> QWEN
     REF -. LLM .-> QWEN
+    SOC -. no key .-> OFF
 
     BOUT --> SCORE
     SOUT --> SCORE
     SCORE["scorer.py · pure Python, no LLM<br/>shared objective function · CI-locked"]
-    SCORE --> BENCH["benchmark.py · seeds × scarcity sweep"]
-    BENCH --> RES["results/gap.png + metrics.json"]
+    SCORE --> BENCH["benchmark.py · seeds × scarcity sweep<br/>(dev / CI reference)"]
 
-    SOUT --> UI["ui/ · calendar · conflict ledger · scoreboard<br/>scrub the rounds"]
+    SOUT --> UI["ui/app.html · ▶ Replay a recorded real run ·<br/>◉ Run live (Qwen, streamed) · calendar ·<br/>transcript (5 voices + referee prose) · ledger · spark"]
     BOUT --> UI
     SCORE --> UI
