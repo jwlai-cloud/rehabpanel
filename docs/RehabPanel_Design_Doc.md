@@ -34,7 +34,7 @@ Two pipelines consume the *same seeded dataset* and produce schedules scored by 
 - **Baseline** — one Qwen agent, single pass, produces a schedule.
 - **Society** — five advocate agents + a referee negotiate a schedule and emit a conflict ledger.
 
-A pure-Python scorer evaluates both; a benchmark runner repeats across seeds and a scarcity sweep; a demo UI renders the calendar, the live agent transcript, and the society-vs-baseline scoreboard.
+A pure-Python scorer evaluates both; a benchmark runner repeats across seeds and a scarcity sweep (dev/CI reference); the coordinator app renders the calendar, the live negotiation transcript (all five advocates + the referee's prose ruling), and the society-vs-single-agent comparison.
 
 ```mermaid
 flowchart TB
@@ -50,8 +50,8 @@ flowchart TB
         B1 --> BOUT["assignments.json"]
     end
     subgraph SOC["Society Pipeline"]
-        ORCH["Charge-Nurse Referee<br/>orchestrator · larger Qwen tier"]
-        subgraph ADV["Advocate Agents — small Qwen tier"]
+        ORCH["Charge-Nurse Referee<br/>orchestrator · flagship tier · writes ruling prose"]
+        subgraph ADV["Advocate Agents — fast tier · all voice each round"]
             A1["Clinical Priority"]
             A2["Follow-up Window"]
             A3["Continuity"]
@@ -70,7 +70,7 @@ flowchart TB
     SCORE["Deterministic Scorer<br/>pure Python · shared objective function"]
     SCORE --> BENCH["Benchmark Runner<br/>N seeds · scarcity sweep"]
     BENCH --> RESULTS["metrics + charts"]
-    SOUT --> UI["Demo UI<br/>calendar · conflict ledger · scoreboard"]
+    SOUT --> UI["Coordinator app · ▶ Replay / ◉ Run live<br/>calendar · transcript (5 voices + referee prose) · ledger · spark"]
     BOUT --> UI
     SCORE --> UI
 ```
@@ -90,7 +90,7 @@ Five advocates each score a candidate schedule through one lens; a referee runs 
 | **Patient Preference** | Availability windows + preferred mode | Preference mismatches |
 | **Charge-Nurse Referee** *(orchestrator)* | Global weighted value; resolves deadlocks; logs rationale | — |
 
-**Distinct-capabilities story under a Qwen-only constraint:** since every agent runs on Qwen Cloud, differentiation comes from (a) **role/prompt**, (b) **tool access**, and (c) **model tier** — the referee runs on a larger Qwen model, advocates on a small/cheap tier. This is both a legitimate capability distinction *and* the primary defense against the limited token budget.
+**Distinct-capabilities story under a Qwen-only constraint:** since every agent runs on Qwen Cloud, differentiation comes from (a) **role/prompt**, (b) **tool access**, and (c) **model tier** — the referee runs on a flagship Qwen tier, advocates on a fast/cheap tier. This is both a legitimate capability distinction *and* the primary defense against the limited token budget. (Exact model ids are env-overridable and never surfaced in the UI, since the catalog shifts.)
 
 ---
 
@@ -100,20 +100,17 @@ A **Draft → Critique → Negotiate → Arbitrate** loop:
 
 ```mermaid
 sequenceDiagram
-    participant Cap as Capacity
-    participant Pri as Priority
-    participant Adv as Other Advocates
-    participant Ref as Referee
-    Cap->>Pri: feasible empty slot skeleton
-    Pri->>Ref: Draft — fill slots by acuity
-    Adv->>Ref: Critique — objections w/ severity scores
-    Ref->>Adv: request swap proposals for high-severity objections
-    Adv->>Ref: Negotiate — proposed swaps + marginal value of each trade
-    Ref->>Ref: Arbitrate deadlocks using global weights + marginal values
-    Ref->>Ref: log rationale to conflict ledger
-    Note over Ref: loop until no objection > threshold OR round cap
-    Ref->>Cap: final schedule for feasibility re-check
-    Ref-->>Adv: final plan + conflict ledger
+    participant Draft as node_draft
+    participant Adv as 5 Advocates
+    participant Ref as Charge-Nurse Referee
+    Draft->>Adv: acuity-first skeleton (no LLM) — or warm seed
+    Adv->>Ref: Critique — ALL five object, each on its objective, own reason + severity
+    Note over Adv,Ref: top objection's advocate proposes a swap
+    Ref->>Ref: form FOR / AGAINST coalitions (deterministic impact model)
+    Ref->>Ref: broker on rank (capacity ≻ acuity ≻ overdue ≻ continuity ≻ preference)
+    Ref->>Adv: apply move (deterministic decision) + write ruling rationale in prose (live)
+    Note over Adv,Ref: loop until no hot objection OR round cap
+    Ref-->>Adv: final plan + conflict ledger + per-round transcript
 ```
 
 1. **Draft** — a **deterministic acuity-first fill** (sickest first into free slots); no LLM — a feasible starting skeleton is a trivial sort+fill, so ≈ the single-agent score. Warm re-plan carries the current plan over and repairs only what an incident broke.
@@ -177,7 +174,7 @@ The single most persuasive figure: sweep `demand_capacity_ratio` from 0.8 → 1.
 - **Technical Depth & Engineering (30%)** — staged negotiation protocol, deterministic scorer, seeded reproducible benchmark, scarcity sweep, model-tiering.
 - **Innovation & AI Creativity (30%)** — advocate/referee society with a conflict ledger; objective-driven negotiation rather than voting.
 - **Problem Value & Impact (25%)** — a real, conflict-heavy clinical-ops pain point, validated by a domain expert, framed as safe decision support.
-- **Presentation & Documentation (15%)** — three-panel live demo + this design doc + reproducible `make benchmark`.
+- **Presentation & Documentation (15%)** — live-negotiation demo (real Qwen) + this design doc + one-command run.
 
 ---
 
@@ -211,10 +208,18 @@ not just measured. Full spec: `spec_coordinator_app.md`; architecture:
   disruption**: the society warm-repairs changing few appointments where a cold
   single agent would churn the whole week. Disruption is a diff reported *outside*
   the locked scorer (we don't claim a raw-value win on re-plan).
+- **Legible negotiation.** Each round the transcript shows **all five advocates'
+  objections** (their own reasons), the winner's proposal, the FOR/AGAINST
+  coalition, and the referee's ruling — written **in prose by the flagship model**
+  (live); the decision itself stays deterministic and reproducible.
+- **Two entry points, no offline result shown.** **▶ Replay** plays a bundled
+  recording of a *real* Qwen negotiation (key-free — the default view); **◉ Run
+  live (Qwen)** streams a fresh one round by round. The UI never shows a
+  deterministic-engine score or a model id.
 - **Causal priority weights.** The Rules view changes both the score and the
   agents' priorities — offline, advocate severities scale by weight; online, the
   weights go into the prompts.
 - **Stack.** FastAPI backend over an in-memory session behind a `Store` interface
   (a DB slots in later); a 5-view SPA (Caseload · Team · Rules ·
-  Schedule/Negotiation · KPIs). Deploy: `deploy.md`.
+  Schedule/Negotiation · KPIs). Deploy: `deploy.md` (Config A — `OFFLINE=1` + key).
 - **Scorer unchanged** — still pure-Python, external, and CI-locked.
