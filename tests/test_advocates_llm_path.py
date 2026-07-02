@@ -90,3 +90,16 @@ def test_propose_swap_online_transport_error_returns_none(monkeypatch):
     monkeypatch.setattr(A, "chat", boom)
     state = {**CTX, "draft": DRAFT}
     assert A.Advocate("window").propose_swap({"patient_id": "P0", "slot_id": "S0"}, state) is None
+
+
+def test_valid_objection_rejects_malformed():
+    """Live LLM objections need a numeric severity + a target, else they must be
+    dropped so the deterministic fallback fires (CodeRabbit: isinstance-dict too weak)."""
+    ok = A._valid_objection
+    assert ok({"patient_id": "P0", "severity": 8})
+    assert ok({"slot_id": "S0", "clinician_id": "C0", "severity": 10})     # capacity shape
+    assert not ok({"patient_id": "P0"})                                     # no severity
+    assert not ok({"patient_id": "P0", "severity": "high"})                 # non-numeric
+    assert not ok({"patient_id": "P0", "severity": True})                   # bool is not a severity
+    assert not ok({"severity": 8})                                          # no target
+    assert not ok("nope") and not ok(None)                                  # not a dict

@@ -5,8 +5,11 @@ Run: uvicorn rehabpanel.api:app --reload   (or `make serve`)
 Respects qwen_client.is_offline(): deterministic without a key, live Qwen with.
 """
 import json
+import logging
 import os
 from pathlib import Path
+
+log = logging.getLogger("rehabpanel")
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
@@ -89,7 +92,8 @@ def stream(seed: int = 7, ratio: float = 1.3):
                 yield f"data: {json.dumps(payload)}\n\n"
             yield f"data: {json.dumps({'done': True})}\n\n"
         except Exception as e:                          # surface a stream error instead of hanging
-            yield f"data: {json.dumps({'error': str(e)[:200]})}\n\n"
+            log.exception("live negotiation stream failed")   # detail to server logs, not the client
+            yield f"data: {json.dumps({'error': 'live negotiation failed — check server logs'})}\n\n"
         finally:
             if prev is None:
                 os.environ.pop("REHABPANEL_OFFLINE", None)

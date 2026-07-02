@@ -53,6 +53,19 @@ def parse_json_obj(text: str) -> dict:
         return {}
 
 
+def _valid_objection(o) -> bool:
+    """A live LLM objection is usable only if it has a NUMERIC severity and a target
+    (patient, or slot/clinician for capacity). `isinstance(o, dict)` alone is too weak:
+    a dict missing severity/target would be kept and skip the deterministic fallback,
+    then misbehave downstream (severity sort, propose_swap). Drop it instead."""
+    if not isinstance(o, dict):
+        return False
+    sev = o.get("severity")
+    if isinstance(sev, bool) or not isinstance(sev, (int, float)):
+        return False
+    return bool(o.get("patient_id") or o.get("slot_id") or o.get("clinician_id"))
+
+
 # ---- shared deterministic helpers (used by the offline path) ---------------
 
 def _index(rows, key):
@@ -340,7 +353,7 @@ class Advocate:
                        'most severe first: [{"patient_id":..,"slot_id":..,"severity":1-10,"reason":".."}]. '
                        "[] if none.")
             msg = [{"role": "system", "content": sysblocks}, {"role": "user", "content": usermsg}]
-            objs = [o for o in parse_json_list(chat(msg, model=ADVOCATE_MODEL)) if isinstance(o, dict)][:3]
+            objs = [o for o in parse_json_list(chat(msg, model=ADVOCATE_MODEL)) if _valid_objection(o)][:3]
         except Exception:
             objs = []  # never crash the graph on an LLM/transport error
         # Live LLM output is flaky (empty / unparseable) -> the society would raise
