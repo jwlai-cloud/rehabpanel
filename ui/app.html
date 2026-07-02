@@ -368,7 +368,9 @@ function runLive(){
   stop(); if(liveES){liveES.close();liveES=null;}
   const btn=$('#live'); btn.disabled=true; btn.textContent='◉ Live…'; btn.classList.add('on');
   ST.rounds=[];                                   // stream a fresh negotiation in
-  const tok=new URLSearchParams(location.search).get('token');   // token-gated deploy: forward /?token=… to the stream
+  let tok=new URLSearchParams(location.search).get('token');     // token-gated deploy: forward /?token=… to the stream
+  if(!tok && location.hash.includes('token='))                   // forgive ?token= placed after the #fragment
+    tok=new URLSearchParams(location.hash.replace(/^#[^?]*\??/,'')).get('token');
   let got=false;                                  // did the stream produce anything? distinguishes a 401 gate from a real run
   liveES=new EventSource('/api/stream'+(tok?('?token='+encodeURIComponent(tok)):''));
   const endLive=lbl=>{ if(liveES){liveES.close();liveES=null;} btn.disabled=false; btn.textContent='◉ Run live (Qwen)'; btn.classList.remove('on'); if(lbl)$('#st').innerHTML=lbl; };
