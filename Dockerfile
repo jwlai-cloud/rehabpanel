@@ -11,6 +11,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY rehabpanel/ rehabpanel/
 COPY ui/ ui/
 
+# run unprivileged — defense in depth (no mounted secrets/volumes, but standard hardening)
+RUN adduser --disabled-password --no-create-home --gecos "" app && chown -R app /app
+USER app
+
 ENV PORT=8000 \
     REHABPANEL_OFFLINE=1
 EXPOSE 8000

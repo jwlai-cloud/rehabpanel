@@ -4,6 +4,7 @@ CoordinatorService — the engine + scorer do the work. Single in-memory session
 Run: uvicorn rehabpanel.api:app --reload   (or `make serve`)
 Respects qwen_client.is_offline(): deterministic without a key, live Qwen with.
 """
+import hmac
 import json
 import logging
 import os
@@ -61,10 +62,19 @@ def rules(r: Rules):
 
 
 @app.get("/api/stream")
-def stream(seed: int = 7, ratio: float = 1.3):
+def stream(seed: int = 7, ratio: float = 1.3, token: str = ""):
     """Server-Sent Events: run a LIVE Qwen negotiation and emit each round the instant
     its node finishes — so the UI renders the debate in REAL TIME (the ~15s of critique
-    LLM calls happen between events). Forces live mode for the duration; needs the key."""
+    LLM calls happen between events). Forces live mode for the duration; needs the key.
+
+    Optional gate: if REHABPANEL_DEMO_TOKEN is set (public deploy), the caller must pass
+    a matching ?token= — this endpoint bills the voucher, so an ungated public URL is a
+    cost/quota DoS. Token rides as a query param because EventSource can't send headers;
+    it is a throwaway demo token, never the API key. Unset (local dev) => no gate."""
+    gate = os.environ.get("REHABPANEL_DEMO_TOKEN")
+    if gate and not hmac.compare_digest(token, gate):
+        return JSONResponse({"error": "live negotiation is token-gated on this deployment"},
+                            status_code=401)
     t = generator.generate(seed=seed, ratio=ratio, write=False)
     P = {p["patient_id"]: p for p in t["patients"]}
     S = {s["slot_id"]: s for s in t["slots"]}

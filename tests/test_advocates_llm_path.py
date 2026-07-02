@@ -21,11 +21,6 @@ def test_parse_json_list_handles_garbage():
     assert A.parse_json_list("[broken") == []
 
 
-def test_parse_json_obj_handles_garbage():
-    assert A.parse_json_obj("nope") == {}
-    assert A.parse_json_obj('ok {"move": {"patient_id": "P0"}} x') == {"move": {"patient_id": "P0"}}
-
-
 def test_critique_online_parses_objections(monkeypatch):
     monkeypatch.setattr(A, "is_offline", lambda: False)
     monkeypatch.setattr(A, "chat",

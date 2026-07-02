@@ -70,3 +70,15 @@ def test_fastapi_app_exposes_routes():
     paths = {r.path for r in app.routes}
     assert {"/api/state", "/api/replan", "/api/rules"} <= paths
     assert "/api/incident/{kind}" in paths
+
+
+def test_stream_token_gate(monkeypatch):
+    """When REHABPANEL_DEMO_TOKEN is set (public deploy), /api/stream must 401 without
+    a matching ?token= — it bills the voucher, so an ungated public URL is a cost DoS."""
+    from fastapi.testclient import TestClient
+    from rehabpanel.api import app
+    c = TestClient(app)
+    monkeypatch.setenv("REHABPANEL_DEMO_TOKEN", "s3cret")
+    assert c.get("/api/stream").status_code == 401                 # no token
+    assert c.get("/api/stream?token=wrong").status_code == 401      # wrong token
+    # correct token / unset gate would start a real negotiation — not exercised here.

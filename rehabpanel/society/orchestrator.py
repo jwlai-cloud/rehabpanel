@@ -23,7 +23,7 @@ import operator
 
 from langgraph.graph import StateGraph, START, END
 
-from .advocates import build_all, parse_json_obj, _OFFLINE_CRITIQUE
+from .advocates import build_all, _OFFLINE_CRITIQUE
 from ..qwen_client import chat, is_offline, REFEREE_MODEL
 
 DATA = Path(__file__).resolve().parent.parent.parent / "data"
@@ -43,7 +43,10 @@ def round_cap():
     to protect the $40 voucher. Override with REHABPANEL_ROUND_CAP."""
     env = os.environ.get("REHABPANEL_ROUND_CAP")
     if env:
-        return int(env)
+        try:                                   # tolerate a fat-fingered value; clamp so it can't
+            return max(1, min(int(env), 100))  # run unbounded live rounds (each round bills the voucher)
+        except ValueError:
+            pass
     return 40 if is_offline() else ROUND_CAP
 
 

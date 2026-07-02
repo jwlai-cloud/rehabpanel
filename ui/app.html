@@ -107,9 +107,6 @@
   .gbar > i{display:block;height:100%;background:var(--teal)}
   .gbar > i.hot{background:var(--red)}
   .muted{color:var(--muted)} .right{margin-left:auto}
-  .livelink{margin-left:auto;text-decoration:none;font-weight:700;font-size:14px;color:var(--teal-d);
-    border:1px solid var(--teal);border-radius:9px;padding:8px 13px;background:var(--teal-soft)}
-  .livelink:hover{background:var(--teal);color:#fff}
   svg .base{stroke:var(--slate);stroke-dasharray:4 3} svg .ln{stroke:var(--teal);fill:none;stroke-width:2.5}
   svg .dotp{fill:var(--teal)} svg text{fill:var(--muted);font-size:11px}
   /* negotiation transcript */
@@ -121,7 +118,6 @@
   .bub .stance{color:var(--muted);font-size:10.5px;text-transform:uppercase;letter-spacing:.05em}
   .bub .v{font-variant-numeric:tabular-nums;color:var(--muted)}
   .bub.ruling{background:var(--teal-soft);border-left-color:var(--teal);font-weight:600}
-  .bub.opp{background:#fff7ef}
   .bub.wf{animation:wf .32s ease both}
   @keyframes wf{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
   @media(prefers-reduced-motion:reduce){.bub.wf{animation:none}}
@@ -313,31 +309,30 @@ function setR(i){ cur=i; const R=ST.rounds[i], last=ST.rounds.length-1, draft=R.
 }
 function objText(o){ const e=Object.entries(o||{}); return e.length?'['+e.map(([k,v])=>`${k}×${v}`).join(', ')+']':''; }
 const ACOLOR={priority:'#cc4b3e',window:'#b06d12',continuity:'#0b6e63',capacity:'#51657a',preference:'#9a4fb0',referee:'#2563a8'};
-const STANCE_IC={objects:'⚑',proposes:'✎',counters:'⇄',supports:'▲',opposes:'▼',ruling:'⚖'};
+const STANCE_IC={objects:'⚑',proposes:'✎',counters:'⇄',ruling:'⚖'};
 function renderNego(R){
   const el=$('#nego'); if(!el) return;
   const tr=R.transcript;
   if(!tr){ el.innerHTML='<div class="muted">Acuity-first draft — negotiation begins next round.</div>'; return; }
   const turns = tr.turns;
-  const full = true;
   const dec=tr.decision==='apply';
   const chip=a=>`<span class="chip" style="border-color:${ACOLOR[a]||'#5a7287'};color:${ACOLOR[a]||'#5a7287'}">${esc(a)}</span>`;
   const bubbles=turns.map((t,i)=>{
     const c=ACOLOR[t.agent]||'#5a7287';
-    const cls='bub wf'+(t.stance==='ruling'?' ruling':(t.stance==='opposes'?' opp':''));
+    const cls='bub wf'+(t.stance==='ruling'?' ruling':'');
     const v=Number(t.value);   // agent JSON may carry a non-numeric value
     return `<div class="${cls}" style="border-left-color:${c};animation-delay:${(i*0.12).toFixed(2)}s">
       <span class="who" style="color:${c}">${STANCE_IC[t.stance]||'•'} ${esc(t.role)}</span>
       <span class="stance">${esc(t.stance)}</span><span class="txt">${esc(t.text)}</span>
       ${Number.isFinite(v)&&v!==0?`<span class="v">${v>0?'+':''}${v}</span>`:''}</div>`;
   }).join('');
-  const coal = full ? `<div class="coal">
+  const coal = `<div class="coal">
       <div class="side"><span class="lbl">Coalition FOR</span>${tr.coalition_for.map(chip).join('')||'<span class="muted">—</span>'}<b>${tr.for_value}</b></div>
       <span class="vs">vs</span>
       <div class="side"><span class="lbl">AGAINST</span>${tr.coalition_against.map(chip).join('')||'<span class="muted">—</span>'}<b>${tr.against_value}</b></div>
       <span class="verdict ${dec?'ok':'no'}">${dec?'✓ AGREED':'✕ REJECTED'}</span>
     </div>`+((tr.rejected&&tr.rejected.length)?`<div class="rejnote">Referee first rejected ${tr.rejected.length} proposal(s) this round: `+
-      tr.rejected.map(r=>esc(r.role+' @ '+r.contested)).join('; ')+`</div>`:'') : '';
+      tr.rejected.map(r=>esc(r.role+' @ '+r.contested)).join('; ')+`</div>`:'');
   el.innerHTML=`<div class="contested">Contested slot: <b>${esc(tr.contested)}</b></div>
     <div class="chat">${bubbles}</div>${coal}`;
 }
@@ -371,7 +366,8 @@ function runLive(){
   stop(); if(liveES){liveES.close();liveES=null;}
   const btn=$('#live'); btn.disabled=true; btn.textContent='◉ Live…'; btn.classList.add('on');
   ST.rounds=[];                                   // stream a fresh negotiation in
-  liveES=new EventSource('/api/stream');
+  const tok=new URLSearchParams(location.search).get('token');   // token-gated deploy: forward /?token=… to the stream
+  liveES=new EventSource('/api/stream'+(tok?('?token='+encodeURIComponent(tok)):''));
   const endLive=lbl=>{ if(liveES){liveES.close();liveES=null;} btn.disabled=false; btn.textContent='◉ Run live (Qwen)'; btn.classList.remove('on'); if(lbl)$('#st').innerHTML=lbl; };
   liveES.onmessage=e=>{ let d; try{d=JSON.parse(e.data);}catch(x){return;}
     if(d.hello){ $('#st').innerHTML='<b>Live:</b> real Qwen agents negotiating…'; return; }

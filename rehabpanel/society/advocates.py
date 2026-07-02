@@ -44,15 +44,6 @@ def parse_json_list(text: str) -> list:
         return []
 
 
-def parse_json_obj(text: str) -> dict:
-    """Extract the first JSON object; {} on failure."""
-    try:
-        m = re.search(r"\{.*\}", text, re.DOTALL)
-        return json.loads(m.group(0)) if m else {}
-    except (json.JSONDecodeError, AttributeError, TypeError):
-        return {}
-
-
 def _valid_objection(o) -> bool:
     """A live LLM objection is usable only if it has a NUMERIC severity and a target
     (patient, or slot/clinician for capacity). `isinstance(o, dict)` alone is too weak:
@@ -400,21 +391,6 @@ def _assignment_state(draft, context):
     seen = _assigned_map(draft)
     unseen = [p["patient_id"] for p in context["patients"] if p["patient_id"] not in seen]
     return f"CURRENT PLAN: {seated}\nUNSCHEDULED: {', '.join(unseen) or 'none'}"
-
-
-def _render_draft(draft, context):
-    """Compact context for the LLM path — short to protect the token budget."""
-    P = _index(context["patients"], "patient_id")
-    S = _index(context["slots"], "slot_id")
-    rows = []
-    for a in draft:
-        p, s = P.get(a["patient_id"]), S.get(a["slot_id"])
-        if p and s:
-            rows.append(f"{p['patient_id']}(acu{p['acuity_score']},prim {p['primary_clinician_id']},"
-                        f"pref {p['preferred_mode']})->{s['slot_id']}[{s['clinician_id']},{s['mode']},{s['date']}]")
-    unseen = [p["patient_id"] for p in context["patients"] if p["patient_id"] not in _assigned_map(draft)]
-    return ("DRAFT:\n" + "\n".join(rows) + "\n\nUNSCHEDULED: " + ", ".join(unseen)
-            + "\n\nFile your objections now.")
 
 
 def build_all():

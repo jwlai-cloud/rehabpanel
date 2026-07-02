@@ -126,7 +126,17 @@ Every round's transcript shows **all five advocates' objections** (each its own 
 
 ## 5. Data Flow & Schema
 
-Five synthetic JSON tables (full schema in `rehabpanel/schema.py` and the generator). Output of both pipelines is `assignments.json`; the society additionally emits `conflict_ledger.json`.
+Five synthetic tables emitted by `rehabpanel/generator.py` (plain dicts; no real data, ever):
+
+| Table | Key fields |
+|---|---|
+| **patients** | `patient_id · name · age · program · acuity_score(1-10) · risk_flags · primary_clinician_id · last_seen_date · followup_due_date` (some before t0 = overdue) · `preferred_mode(clinic/tele/home) · availability · no_show_risk` |
+| **clinicians** | `clinician_id · name · weekly_capacity_slots · clinic_days · max_home_visits_per_day · base_zone` |
+| **slots** | `slot_id · clinician_id · date · start_time · duration_min · mode · zone · status` |
+| **encounters** | `encounter_id · patient_id · clinician_id · date · type · outcome` (history) |
+| **assignments** (output) | `patient_id · slot_id · assigned_in_round · rationale` |
+
+Both pipelines output assignments; the society additionally emits the **conflict ledger** and per-round snapshots.
 
 ```
 Generator(seed, demand_capacity_ratio)

@@ -184,8 +184,7 @@ class CoordinatorService:
         t = w["tables"]
         w["pre_replan_plan"] = list(w["committed_plan"])
         if kind == "sick":
-            # clinician C00 out Tuesday -> drop their Tue slots
-            tue = (date.fromisoformat(t["meta"]["t0"])).isoformat()  # Mon t0; Tue = +1
+            # clinician C00 out Tuesday -> drop their Tue slots (Mon t0; Tue = +1)
             from datetime import timedelta
             tue = (date.fromisoformat(t["meta"]["t0"]) + timedelta(days=1)).isoformat()
             gone = {s["slot_id"] for s in t["slots"] if s["clinician_id"] == "C00" and s["date"] == tue}
