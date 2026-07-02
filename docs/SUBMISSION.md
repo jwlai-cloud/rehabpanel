@@ -9,8 +9,8 @@ Deadline 2026-07-09 14:00 PDT · Public repo · MIT · Fully synthetic data.
 
 Five "advocate" agents and a charge-nurse referee **negotiate** which rehab
 patients to follow up under scarce clinician slots. A single agent collapses the
-trade-off; the negotiating society reaches a higher multi-objective score — and
-the advantage widens as demand outstrips capacity.
+trade-off; the negotiating society reaches a higher multi-objective score on the
+same scorer — repairing the continuity and preference a single agent abandons.
 
 ## What it does
 
@@ -27,29 +27,25 @@ synthetic caseload, scored by the **same** deterministic function:
 
 ## The measurable result (the point of Track 3)
 
-`make benchmark` — 5 seeds × 5 scarcity levels, deterministic, reproducible:
+Two planners, the **same** deterministic scorer, the **same** week (56 patients,
+43 slots, seed 7, demand/capacity 1.3). A recorded **real Qwen** negotiation
+(bundled, replayable in-app via **▶ Replay**):
 
-| demand / capacity | mean value gap (society − baseline) | min gap | feasible |
-|------:|------:|------:|:--:|
-| 0.8 | +28.2 | +18 | ✓ |
-| 1.0 | +40.2 | +30 | ✓ |
-| 1.2 | +41.0 | +27 | ✓ |
-| 1.4 | +44.2 | +29 | ✓ |
-| 1.6 | +42.2 | +36 | ✓ |
+| Objective | Single agent | Society (live Qwen) |
+|---|---:|---:|
+| Total score *(higher is better)* | 160 | **181** (+21) |
+| Continuity breaks *(lower is better)* | 30 | **25** |
+| Preference mismatches *(lower is better)* | 26 | **17** |
+| Overdue days *(lower is better)* | 209 | **207** |
+| High-acuity coverage | 100% | 100% |
+| Patients scheduled | 43 / 56 | 43 / 56 |
 
-The society **out-scores the baseline on every single run** (min gap > 0), the
-advantage **grows through the conflict-onset region** (0.8 → 1.4), and every plan
-stays capacity-feasible. Headline figure: `results/gap.png`. The gain comes from
-the society repairing continuity and preference that the single agent abandons,
-while holding high-acuity coverage constant.
-
-**Live proof (real Qwen).** The reproducible table above is the key-free offline
-reference; the app's **Run live** button streams a *real* negotiation. A recorded
-live run (bundled, replayable in-app) climbs **160 → 181 (+21)** over **12 rounds** —
-all five advocates voice objections each round and the flagship referee explains
-every ruling in prose. Live converges below the offline ceiling (~212) because the
-LLM critique is less exhaustive than the rule critique — an honest LLM-vs-reference
-gap, not a scorer artifact.
+The society climbs **160 → 181, +21** over **12 rounds** — each round all five
+advocates voice objections and the flagship referee explains every ruling in prose.
+The gain is architectural (negotiation, not a bigger model): the society repairs
+the continuity and preference a single agent abandons while holding high-acuity
+coverage. Press **◉ Run live (Qwen)** to watch a fresh negotiation stream round by
+round.
 
 **Second gain — adaptivity under disruption.** After an incident (nurse sick,
 cancellation, urgent referral), the society **warm-repairs** the plan with
@@ -77,10 +73,10 @@ scorer); we do **not** claim a raw-value win on re-plan.
 - **Pure-Python deterministic scorer** (`scorer.py`, no LLM) scores both
   pipelines identically — reproducibility is the differentiator over typical
   entries. Locked by unit tests in CI.
-- **Dual execution path**: live Qwen agents for the demo; a deterministic
-  offline reference negotiator (`REHABPANEL_OFFLINE`) implementing the same
-  critique/arbitrate contract so CI, tests, and judges reproduce the gap
-  key-free without spending the voucher.
+- **Runs on real Qwen**: the demo and the recorded run are genuine Qwen
+  negotiations. A key-free deterministic path (`REHABPANEL_OFFLINE`) implementing
+  the same critique/arbitrate contract exists only so CI and unit tests run
+  without spending the voucher.
 - **Synthetic generator** with engineered scarcity & conflict (overdue spread,
   shared-clinician clustering, preference/capacity collisions). No real data.
 - **Negotiation view**: weekly calendar + a live conflict ledger + a per-round
@@ -100,10 +96,9 @@ scorer); we do **not** claim a raw-value win on re-plan.
 
 ## What's next
 
-Live-Qwen runs are now recorded and replayable in-app (the offline table stays the
-key-free reproducible reference); next: merge LLM + rule critique so live converges
-closer to the offline ceiling; learned/tuned objective weights from clinician
-input; richer modes (home-visit travel routing).
+Merge the LLM critique with the rule critique so the live negotiation surfaces more
+improving swaps per round; learned/tuned objective weights from clinician input;
+richer modes (home-visit travel routing); a scarcity sweep of live runs.
 
 ## Eligibility — new build
 
@@ -113,28 +108,28 @@ scorer, generator, and UI were all written for this hackathon.
 
 ## How it maps to the rubric
 
-- **Technical depth (30%)** — staged negotiation protocol, deterministic scorer,
-  seeded reproducible benchmark + scarcity sweep, model-tiering, CI lock.
+- **Technical depth (30%)** — staged negotiation protocol (draft → critique →
+  negotiate → arbitrate), pure-Python deterministic scorer, model-tiering, CI lock.
 - **Innovation (30%)** — advocate/referee society with a conflict ledger;
   objective-driven negotiation, not majority vote.
 - **Problem value (25%)** — a real, conflict-heavy clinical-ops pain point,
   framed as safe decision support.
-- **Presentation (15%)** — 3-panel live demo + design doc + one-command repro.
+- **Presentation (15%)** — live-negotiation demo + design doc + one-command run.
 
-## Reproduce in one command
+## Run it
 
 ```bash
 pip install -r requirements.txt
-make benchmark      # 25 runs -> results/metrics.json + results/gap.png (key-free)
-make test           # locks the scorer
+make test           # locks the deterministic scorer (CI runs this on every push)
+make serve          # → http://localhost:8000 · ▶ Replay a real run, or ◉ Run live (with a key)
 ```
 
 ## Honest scope
 
 - **Decision support, not autonomous clinical scheduling.** A human approves.
 - **Fully synthetic data.** No real or anonymized patient records, anywhere.
-- The reported numbers come from the **deterministic offline path** so anyone can
-  reproduce them without a key; the live demo runs the real Qwen agents.
+- The reported numbers are from a **real Qwen** negotiation, replayable in-app; a
+  key-free deterministic path exists only for CI and unit tests.
 
 ---
 
@@ -149,14 +144,14 @@ Driven by the **coordinator app** (`make serve`).
 | 0:45–1:45 | **Schedule** → press **◉ Run live (Qwen)** | "Watch the society negotiate — live. Each round all five advocates object on their own objective; the charge-nurse referee resolves one conflict and explains the ruling in plain language. Value climbs 160 → 181, +21 — a gain a single agent never finds. (▶ Replay shows the same recorded run instantly, no tokens.)" |
 | 1:45–2:20 | **Incident → Nurse sick → Re-plan** | "Reality breaks: a nurse calls in sick, orphaning patients. Re-plan — the society warm-repairs, changing only a handful of appointments; a single agent would re-shuffle the whole week." |
 | 2:20–2:45 | **KPIs** session timeline | "Every disruption dips, every re-plan recovers — with minimal disruption. That's the measurable efficiency." |
-| 2:45–3:00 | `gap.png` + `qwen_client.py` | "Across 25 runs the society wins every time, widening with scarcity. All Qwen on Alibaba Cloud, deterministic scorer, one-command reproduce. Decision support, synthetic data." |
+| 2:45–3:00 | **Conflict ledger** + `qwen_client.py` | "Every ruling is logged — an auditable record of why each patient sits where they do. Same scorer for both planners; the society just negotiates a better plan. All Qwen on Alibaba Cloud. Decision support, synthetic data." |
 
 ## Submission checklist
 
 - [x] Public repo + MIT `LICENSE` (holder set)
 - [x] `qwen_client.py` shows the dashscope-intl (Alibaba Cloud) call — deploy proof
 - [x] Architecture diagram (`docs/architecture.svg`)
-- [x] Deterministic one-command repro (`make benchmark`) + CI lock
+- [x] One-command run (`make serve`) + CI-locked scorer (`make test`)
 - [x] All data synthetic
 - [ ] ≤3-min demo video recorded
 - [ ] Devpost text + Track 3 + measurable gain (this doc)

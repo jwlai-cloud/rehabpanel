@@ -23,28 +23,27 @@ make test        # unit tests
 ```
 
 > Runs **key-free** by default: with no `DASHSCOPE_API_KEY`, a deterministic
-> offline reference negotiator reproduces the benchmark gap so CI and judges
-> don't spend the voucher. Set the key and `unset REHABPANEL_OFFLINE` to run the
-> live Qwen agents.
+> reference path implements the same negotiation contract so CI and unit tests
+> run without spending the voucher. Set the key to run the live Qwen agents (and
+> the in-app **▶ Replay** shows a recorded real negotiation with no key).
 
 ## Result
 
-`make benchmark` — 5 seeds × 5 scarcity levels, deterministic:
+Two planners, the **same** deterministic scorer, the **same** week (56 patients,
+43 slots). A recorded **real Qwen** negotiation (in-app **▶ Replay**):
 
-| demand / capacity | mean value gap (society − baseline) | feasible |
-|------:|------:|:--:|
-| 0.8 | +28.2 | ✓ |
-| 1.0 | +40.2 | ✓ |
-| 1.2 | +41.0 | ✓ |
-| 1.4 | +44.2 | ✓ |
-| 1.6 | +42.2 | ✓ |
+| Objective | Single agent | Society (live) |
+|---|---:|---:|
+| Total score *(higher is better)* | 160 | **181** (+21) |
+| Continuity breaks | 30 | **25** |
+| Preference mismatches | 26 | **17** |
+| Overdue days | 209 | **207** |
+| High-acuity coverage | 100% | 100% |
 
-The society out-scores the single agent on **every run**, and the advantage
-**grows through the conflict-onset region (0.8 → 1.4)** (`results/gap.png`). It
-wins by repairing continuity and preference that the single agent abandons, while
-holding high-acuity coverage constant. A recorded **live** Qwen run (in-app
-**▶ Replay**) climbs 160 → 181 (+21) with all five advocates voicing objections
-and the referee explaining each ruling.
+The society climbs **160 → 181 (+21)** over 12 rounds — all five advocates voice
+objections each round and the referee explains every ruling. It wins by repairing
+the continuity and preference a single agent abandons, while holding high-acuity
+coverage. Press **◉ Run live (Qwen)** to stream a fresh one.
 
 ## Coordinator app (`make serve`)
 A multi-view app where the agent society **assists a nurse coordinator**: see the
@@ -66,9 +65,9 @@ Alibaba Cloud per `docs/deploy.md` (Config A).
 ## How it works
 See `docs/RehabPanel_Design_Doc.md` and the architecture diagrams
 (`docs/architecture.svg` engine · `docs/architecture_app.svg` coordinator app).
-The deterministic scorer (`rehabpanel/scorer.py`)
-evaluates both pipelines with the same objective function, so the measured gain
-is reproducible: `make benchmark` regenerates every number.
+The deterministic scorer (`rehabpanel/scorer.py`, pure Python, no LLM)
+evaluates both pipelines with the same objective function and is CI-locked
+(`make test`), so the head-to-head is apples-to-apples.
 
 ## Docs
 - `docs/RehabPanel_Design_Doc.md` — design + ADRs
