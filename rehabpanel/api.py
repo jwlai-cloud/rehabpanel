@@ -106,32 +106,27 @@ _BUNDLED_REPLAY = Path(__file__).resolve().parent / "recordings" / "negotiation.
 
 @app.get("/api/replay")
 def replay():
-    """Return a previously recorded real-Qwen negotiation (round events + inter-round
-    gaps in seconds) so the SPA can replay it — no key, no tokens. Reads the jsonl at
-    $REHABPANEL_REPLAY, else the bundled recording. Lines are "<ts>\\t<sse-payload>".
-    This is the SPA's default view and a no-cost demo of a genuine negotiation."""
+    """Return a previously recorded real-Qwen negotiation (round events) so the SPA can
+    replay it — no key, no tokens. Reads the jsonl at $REHABPANEL_REPLAY, else the bundled
+    recording. Lines are "<ts>\\t<sse-payload>". This is the SPA's default view and a
+    no-cost demo of a genuine negotiation."""
     path = os.environ.get("REHABPANEL_REPLAY")
     if not path or not Path(path).exists():
         path = str(_BUNDLED_REPLAY) if _BUNDLED_REPLAY.exists() else None
     if not path:
         return JSONResponse({"error": "no replay available"}, status_code=404)
-    rounds, ts = [], []
+    rounds = []
     for line in Path(path).read_text().splitlines():
         if not line.strip():
             continue
-        t, _, pl = line.partition("\t") if "\t" in line else (None, None, line)
+        _, _, pl = line.partition("\t") if "\t" in line else (None, None, line)
         try:
             d = json.loads(pl)
         except Exception:
             continue
         if "round" in d:
             rounds.append(d)
-            ts.append(float(t) if t else None)
-    gaps = []
-    for i in range(len(ts)):
-        nxt = ts[i + 1] if (i + 1 < len(ts) and ts[i + 1] and ts[i]) else (ts[i] + 2.5 if ts[i] else None)
-        gaps.append(round(nxt - ts[i], 2) if (nxt and ts[i]) else 2.5)
-    return {"events": rounds, "gaps": gaps}
+    return {"events": rounds}
 
 
 # serve the coordinator SPA at /
