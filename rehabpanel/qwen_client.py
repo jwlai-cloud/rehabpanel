@@ -43,7 +43,7 @@ def is_offline() -> bool:
 REFEREE_MODEL = os.environ.get("REHABPANEL_REFEREE_MODEL", "qwen3.7-max")    # flagship reasoning — arbitrates
 BASELINE_MODEL = os.environ.get("REHABPANEL_BASELINE_MODEL", "qwen3.7-plus") # strong mid tier — single-agent baseline
                                  # (deliberately NOT the cheap flash tier, so the win is architectural)
-ADVOCATE_MODEL = os.environ.get("REHABPANEL_ADVOCATE_MODEL", "qwen3.5-flash")  # cheap/fast tier — the 5 advocates
+ADVOCATE_MODEL = os.environ.get("REHABPANEL_ADVOCATE_MODEL", "qwen3.6-flash-2026-04-16")  # cheap/fast tier — the 5 advocates
 
 
 def chat(messages, model=ADVOCATE_MODEL, temperature=0.2, **kw):
