@@ -5,7 +5,8 @@ scarce clinician time. Built for the Global AI Hackathon Series with Qwen Cloud
 (Track 3). Five advocate agents — clinical priority, follow-up window, continuity,
 capacity, and patient preference — **negotiate** a weekly schedule, refereed by a
 charge-nurse agent. A single-agent baseline collapses the trade-off; the society
-negotiates it, and the advantage grows as demand outstrips capacity.
+negotiates it — recovering the continuity and preference a single agent abandons,
+on the same scorer.
 
 > Decision support on **fully synthetic data**. No real patient records.
 
