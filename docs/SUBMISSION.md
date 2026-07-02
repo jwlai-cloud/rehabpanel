@@ -3,6 +3,11 @@
 Global AI Hackathon Series with Qwen Cloud · **Track 3: Agent Society**
 Deadline 2026-07-09 14:00 PDT · Public repo · MIT · Fully synthetic data.
 
+**Live demo (Alibaba Cloud):** http://8.222.187.218 — lands on **▶ Replay** (a real
+Qwen negotiation, 160→181, free, no key). **◉ Run live** streams a fresh real
+negotiation and is token-gated to protect the voucher; the judge link (with the
+token) is provided in the Devpost submission, not this public repo.
+
 ---
 
 ## One-liner
@@ -155,5 +160,5 @@ Driven by the **coordinator app** (`make serve`).
 - [x] All data synthetic
 - [ ] ≤3-min demo video recorded
 - [ ] Devpost text + Track 3 + measurable gain (this doc)
-- [ ] Public deploy link (static `ui/` → Vercel / Alibaba OSS at submission)
+- [x] Public deploy link — **Alibaba Cloud SAS**, http://8.222.187.218 (live app; ▶ Replay free, ◉ Run live token-gated)
 - [ ] Blog post (separate near-free prize)

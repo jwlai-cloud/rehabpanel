@@ -10,6 +10,10 @@ on the same scorer.
 
 > Decision support on **fully synthetic data**. No real patient records.
 
+**Live demo:** http://8.222.187.218 → **▶ Replay** a real Qwen negotiation (160→181),
+key-free. (**◉ Run live** is token-gated to protect the voucher — judges get the
+tokened link in the Devpost submission.)
+
 ## Quick start
 ```bash
 python -m venv .venv && source .venv/bin/activate
