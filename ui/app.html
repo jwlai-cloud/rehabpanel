@@ -200,7 +200,7 @@ async function act(m,p,b){ stop(); ST=await api(m,p,b); cur=ST.rounds.length-1; 
   } else if(p==='/replan'){ const d=ST.disruption; say('Re-planned. '+(d?d.changed+' of '+d.total+' appointments changed.':'')); } }
 function init(){
   (ST.clinicians||[]).forEach((c,i)=>CMAP[c.id]=CLR[i%CLR.length]);
-  $('#reset').onclick=()=>act('POST','/reset');
+  $('#reset').onclick=async()=>{ await api('POST','/reset'); loadReplay(false); };  // clear session, then restore the recorded-run view (never the deterministic 212)
   $('#nav').innerHTML=VIEWS.map(([k,l])=>`<button data-v="${k}">${l}</button>`).join('');
   $('#nav').querySelectorAll('button').forEach(b=>b.onclick=()=>{view=b.dataset.v;location.hash=view;stop();render();});
   const h=location.hash.slice(1); if(VIEWS.some(v=>v[0]===h))view=h;   // deep-link to a view
