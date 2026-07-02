@@ -190,6 +190,8 @@ async function loadReplay(autoplay){
   if(ST.scores&&ST.scores.committed) Object.assign(ST.scores.committed,
     {value:fs.value,continuity_breaks:fs.continuity_breaks,preference_mismatches:fs.preference_mismatches,patients_scheduled:fs.patients_scheduled});
   if(ST.scores&&ST.scores.baseline) ST.headline_gap=Math.round((fs.value-ST.scores.baseline.value)*10)/10;
+  // session timeline = the real recorded climb (draft 160 → 181), not the deterministic 212 seed
+  ST.score_history=ST.rounds.map((r,i)=>({value:r.score.value, label:(i?('r'+r.round):'draft')}));
   view='schedule';
   if(autoplay){ cur=0; render(); play(); } else { cur=ST.rounds.length-1; render(); }
   return true; }
