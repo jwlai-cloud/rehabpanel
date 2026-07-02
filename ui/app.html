@@ -185,9 +185,68 @@ const api=(m,p,b)=>fetch('/api'+p,{method:m,headers:{'Content-Type':'application
 
 async function boot(){ ST=await fetch('/api/state').then(r=>r.json()); init();
   const q=new URLSearchParams(location.search);
+  if(q.has('capture')) return bootCapture(q);                        // deep-link: 16:9 broadcast frame for round ?fr=K
   if(q.has('replay')) return bootReplay(q);                          // deep-link: single-frame capture
   if(q.has('live')){ setTimeout(runLive,400); return; }              // deep-link: auto-start live
   loadReplay(false); }                                               // default: show the recorded REAL run — never the deterministic society
+// 16:9 broadcast layout for a recording — three sections that change each round (debate · ruling+coalition · climbing spark), big + legible
+async function bootCapture(q){
+  const ev=await fetch('/api/replay').then(r=>r.json()).catch(()=>null);
+  if(!ev||!ev.events||!ev.events.length){ document.body.innerHTML='<p style="padding:40px">no recording</p>'; return; }
+  ST.rounds=ev.events.map(_mkRound);
+  const k=q.has('fr')?Math.max(0,Math.min(+q.get('fr'),ST.rounds.length-1)):ST.rounds.length-1;
+  renderCapture(k); }
+function renderCapture(k){
+  const R=ST.rounds[k], last=ST.rounds.length-1, b=ST.scores.baseline, sc=R.score;
+  const gap=Math.round((sc.value-b.value)*10)/10, tr=R.transcript||null, turns=(tr&&tr.turns)||[];
+  const objs=turns.filter(t=>t.stance==='objects'), prop=turns.find(t=>t.stance==='proposes'||t.stance==='counters'), rule=turns.find(t=>t.stance==='ruling');
+  const bub=(t,big)=>{const c=ACOLOR[t.agent]||'#5a7287';
+    return `<div style="border-left:4px solid ${c};background:#fbfdfd;border:1px solid #e9eff5;border-radius:10px;padding:9px 13px;margin:7px 0;display:flex;gap:11px;align-items:baseline">
+      <b style="color:${c};white-space:nowrap;font-size:${big?15:14}px">${STANCE_IC[t.stance]||'•'} ${esc(t.role)}</b>
+      <span style="color:#26425c;font-size:${big?15:14}px;line-height:1.4">${esc(t.text)}</span>
+      ${Number(t.value)?`<span style="margin-left:auto;color:#5a7287;font:600 12px ui-monospace,Menlo">${t.value>0?'+':''}${t.value}</span>`:''}</div>`;};
+  const vals=ST.rounds.slice(0,k+1).map(r=>r.score.value);
+  const dec=tr&&tr.decision==='apply';
+  const left = tr ? `${objs.map(t=>bub(t)).join('')}${prop?bub(prop,true):''}`
+    : `<div style="color:var(--muted);padding:30px 6px;font-size:16px">Acuity-first starting draft — the five advocates begin negotiating next round.</div>`;
+  document.body.innerHTML=`
+   <div style="width:1600px;height:900px;box-sizing:border-box;background:var(--paper);font:400 15px system-ui,-apple-system,Arial;color:var(--ink)">
+    <div style="display:flex;align-items:center;gap:16px;padding:16px 26px;background:#fff;border-bottom:2px solid var(--teal)">
+      <svg width="30" height="30" viewBox="0 0 28 28"><rect x="1" y="1" width="26" height="26" rx="7" fill="#e6f3f0" stroke="#0b6e63" stroke-width="1.5"/><path d="M4 15 H9 L11 9 L15 19 L17 13 H24" fill="none" stroke="#0b6e63" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <b style="font-size:20px">Rehab<span style="color:var(--teal)">Panel</span> · live negotiation</b>
+      <span style="color:var(--muted);font:700 13px ui-monospace,Menlo;border:1px solid var(--line);border-radius:999px;padding:5px 11px">real Qwen — 5 advocates + referee</span>
+      <div style="margin-left:auto;display:flex;gap:28px;align-items:baseline;font-variant-numeric:tabular-nums">
+        <div><span style="font:800 15px ui-monospace,Menlo;color:var(--muted)">Round ${R.round}/${ST.rounds[last].round}</span></div>
+        <div><span style="font:800 32px ui-monospace,Menlo;color:var(--teal-d)">${sc.value}</span> <span style="color:var(--muted);font-size:13px">value</span></div>
+        <div><span style="font:800 26px ui-monospace,Menlo;color:${gap>=0?'#0b6e63':'#cc4b3e'}">${gap>=0?'+':''}${gap}</span> <span style="color:var(--muted);font-size:13px">vs single agent</span></div>
+        <div><span style="font:700 20px ui-monospace,Menlo">${sc.continuity_breaks}</span> <span style="color:var(--muted);font-size:13px">cont</span></div>
+        <div><span style="font:700 20px ui-monospace,Menlo">${sc.preference_mismatches}</span> <span style="color:var(--muted);font-size:13px">pref</span></div>
+      </div>
+    </div>
+    <div style="display:flex;gap:16px;padding:16px 26px;height:822px;box-sizing:border-box">
+      <div style="flex:1.4;background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px 18px;overflow:hidden;display:flex;flex-direction:column">
+        <h3 style="margin:0 0 3px;font-size:12px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)">This round — five advocates object · one proposes</h3>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:6px">Contested slot: <b style="color:var(--ink)">${esc((tr&&tr.contested)||'—')}</b></div>
+        <div style="overflow:hidden">${left}</div>
+      </div>
+      <div style="flex:1;display:flex;flex-direction:column;gap:14px">
+        <div style="background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px 18px">
+          <h3 style="margin:0 0 4px;font-size:12px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)">Plan value — climbing each round</h3>
+          <div>${spark(vals, b.value)}</div>
+        </div>
+        <div style="background:var(--teal-soft);border:1px solid #bfe0d8;border-left:5px solid var(--teal);border-radius:14px;padding:15px 18px;flex:1;display:flex;flex-direction:column">
+          <h3 style="margin:0 0 8px;font-size:12px;letter-spacing:.07em;text-transform:uppercase;color:var(--teal-d)">⚖ Charge-Nurse Referee — ruling</h3>
+          <div style="font-size:16px;color:#1d3a34;line-height:1.5;flex:1">${esc((rule&&rule.text)||'Negotiation begins next round.')}</div>
+          <div style="margin-top:12px;display:flex;align-items:center;gap:12px;font:600 13px ui-monospace,Menlo;flex-wrap:wrap">
+            <span style="color:var(--teal-d)">FOR ${((tr&&tr.coalition_for)||[]).join(', ')||'—'} (${(tr&&tr.for_value)||0})</span>
+            <span style="color:var(--muted)">vs</span>
+            <span style="color:var(--red)">AGAINST ${((tr&&tr.coalition_against)||[]).join(', ')||'—'} (${(tr&&tr.against_value)||0})</span>
+            ${tr?`<span style="margin-left:auto;color:#fff;background:${dec?'var(--teal)':'#cc4b3e'};border-radius:999px;padding:6px 13px">${dec?'✓ APPLIED':'✕ REJECTED'}</span>`:''}
+          </div>
+        </div>
+      </div>
+    </div>
+   </div>`; }
 // load the recorded real-Qwen run into ST as the default/played negotiation (no tokens)
 async function loadReplay(autoplay){
   const ev=await fetch('/api/replay').then(r=>r.json()).catch(()=>null);
