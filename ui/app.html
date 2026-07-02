@@ -367,9 +367,10 @@ function runLive(){
   const btn=$('#live'); btn.disabled=true; btn.textContent='◉ Live…'; btn.classList.add('on');
   ST.rounds=[];                                   // stream a fresh negotiation in
   const tok=new URLSearchParams(location.search).get('token');   // token-gated deploy: forward /?token=… to the stream
+  let got=false;                                  // did the stream produce anything? distinguishes a 401 gate from a real run
   liveES=new EventSource('/api/stream'+(tok?('?token='+encodeURIComponent(tok)):''));
   const endLive=lbl=>{ if(liveES){liveES.close();liveES=null;} btn.disabled=false; btn.textContent='◉ Run live (Qwen)'; btn.classList.remove('on'); if(lbl)$('#st').innerHTML=lbl; };
-  liveES.onmessage=e=>{ let d; try{d=JSON.parse(e.data);}catch(x){return;}
+  liveES.onmessage=e=>{ let d; try{d=JSON.parse(e.data);}catch(x){return;} got=true;
     if(d.hello){ $('#st').innerHTML='<b>Live:</b> real Qwen agents negotiating…'; return; }
     if(d.error){ endLive('<b>Live error:</b> '+esc(d.error)); return; }
     if(d.done){ endLive(); return; }
@@ -377,7 +378,8 @@ function runLive(){
     const last=ST.rounds.length-1; const sl=$('#sl'); if(sl)sl.max=last;
     setR(last);                                   // re-renders calendar + transcript + ledger + spark + KPIs
   };
-  liveES.onerror=()=>endLive();
+  liveES.onerror=()=>{ endLive(got ? '' :          // nothing streamed = token gate (401) or network → guide the judge, don't just reset
+    '<b>◉ Live is reserved for judges.</b> Open the link from our submission — it ends with <code>?token=…</code> — or press <b>▶ Replay</b> to watch a recorded real negotiation now.'); };
 }
 
 /* SVG sparkline */
